@@ -4430,3 +4430,27 @@ Clients receiving 429s had only `Retry-After` to guide backoff. The new headers 
 | babb0fc8 | feat(rate_limit): populate RetryContext with retry_reason before raising RateLimitError |
 | b0d05bb5 | feat(app): enrich 429 responses with X-Retry-Count, X-Retry-Reason, X-RateLimit-* headers |
 | b4dbbabe | feat(routers): pass request to enforce_rate_limit and enforce_per_key_rate_limit |
+
+---
+
+## Session 75 — CORS Middleware (2026-03-25)
+
+### What changed
+- `config.py` — modified
+- `app.py` — modified
+- `tests/test_cors.py` — created
+
+### Which lines / functions
+- `config.py:Settings` — added `# ── CORS` block immediately before `# ── Prometheus metrics`; two new fields: `cors_enabled: bool = Field(default=False, alias="SHINWAY_CORS_ENABLED")` and `cors_origins: str = Field(default="*", alias="SHINWAY_CORS_ORIGINS")`
+- `app.py:create_app` — added conditional `CORSMiddleware` registration block immediately after `GZipMiddleware`; imports `starlette.middleware.cors.CORSMiddleware` inside the `if` block (zero import cost when disabled); parses comma-separated origins with `[o.strip() for o in settings.cors_origins.split(",") if o.strip()]`; logs `cors_enabled` with origins list
+- `tests/test_cors.py` — created; 15 tests using `monkeypatch.setattr(config_mod.settings, ...)` + `create_app()` (no `importlib.reload` — follows project pattern); covers: config defaults, field patching, CORS disabled (no header on GET, OPTIONS→405), wildcard enabled (header present, preflight 200), single explicit origin (match / non-match), multiple comma-separated origins (first, second, unlisted excluded), whitespace trimming, preflight with explicit origin
+
+### Why
+Browser-based clients (admin UIs, web playgrounds) hitting the proxy directly were blocked by same-origin policy. `CORSMiddleware` from Starlette (already a transitive FastAPI dependency — zero new installs) is now registered conditionally: absent from the middleware stack entirely when `SHINWAY_CORS_ENABLED=false` (default), so server-to-server usage has no overhead or header noise. The plan specified `importlib.reload` in tests; this was replaced with `monkeypatch.setattr` on the settings singleton to match the established codebase pattern and avoid `sys.modules` pollution that caused `ModuleNotFoundError: No module named 'routers.unified'` regressions when CORS tests ran before other tests.
+
+### Commits
+| SHA | Description |
+|-----|-------------|
+| f736c312 | feat(config): add SHINWAY_CORS_ENABLED and SHINWAY_CORS_ORIGINS settings |
+| d69b5433 | test(cors): write failing CORS tests for config fields and middleware wiring |
+| 827cb05e | feat(app): register CORSMiddleware when SHINWAY_CORS_ENABLED=true |
