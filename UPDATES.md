@@ -4365,3 +4365,34 @@ User requested a real-time tracking view alongside the 5m/30m/1h window buttons.
 | SHA | Description |
 |-----|-------------|
 | 9a4efbb7 | refactor(converters): replace to_cursor and from_cursor with thin shims |
+
+## Session 73 — Structured Request/Response Logging Middleware (2026-03-25)
+
+### What changed
+- `middleware/logging.py` — created
+- `tests/test_logging_middleware.py` — created
+- `config.py` — added `log_sample_rate` field
+- `app.py` — replaced `request_id_middleware` with `request_context_middleware`
+- `routers/openai.py` — populate `RequestContext` with model, stream, api_key_prefix
+- `routers/anthropic.py` — same
+- `pipeline/record.py` — emit `pipeline_complete` structlog event
+
+### Which lines / functions
+- `middleware/logging.py` — new file: `RequestContext` dataclass, `get_ctx()`, `request_context_middleware()`
+- `config.py:Settings` — added `log_sample_rate: float` (alias `SHINWAY_LOG_SAMPLE_RATE`, default 1.0)
+- `app.py:create_app` — replaced inline `request_id_middleware` block with delegation to `request_context_middleware`; removed unused `import uuid`
+- `routers/openai.py:chat_completions` — added `_get_ctx` calls to set `api_key_prefix`, `model`, `stream` on `RequestContext`
+- `routers/anthropic.py:anthropic_messages` — same pattern
+- `pipeline/record.py:_record` — added `log.info("pipeline_complete", ...)` after `analytics.record()` for request_id-correlated logging
+
+### Why
+Requested feature: full structured request/response lifecycle logging with request_id correlation. Previously only `http_request` was logged at the HTTP layer with no pipeline correlation. Now three events are emitted per request: `request_start` (always), `request_end` (sampled by `SHINWAY_LOG_SAMPLE_RATE`), and `pipeline_complete` (always, correlated by `request_id`). Metadata only — no content bodies logged. `RequestContext` replaces the ad-hoc `request.state.request_id` pattern with a typed dataclass.
+
+### Commits
+| SHA | Description |
+|-----|-------------|
+| 1b5042d5 | feat(middleware): add RequestContext and request_context_middleware |
+| 28169c43 | feat(config): add SHINWAY_LOG_SAMPLE_RATE setting |
+| ab9fe002 | refactor(app): replace request_id_middleware with request_context_middleware |
+| 050d44d9 | feat(routers): populate RequestContext with model, stream, api_key_prefix |
+| 81c7a946 | feat(pipeline): emit pipeline_complete structlog event with request_id correlation |
