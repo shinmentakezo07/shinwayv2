@@ -47,3 +47,17 @@ async def _record(
             output_tps=output_tps,
         )
     )
+    log.info(
+        "pipeline_complete",
+        request_id=params.request_id,
+        model=params.model,
+        api_style=params.api_style,
+        provider=provider,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=round(cost, 6),
+        latency_ms=round(latency_ms, 1),
+        cache_hit=cache_hit,
+        ttft_ms=ttft_ms,
+        output_tps=round(output_tps, 2) if output_tps else None,
+    )
