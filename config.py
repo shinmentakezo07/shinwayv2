@@ -532,6 +532,16 @@ class Settings(BaseSettings):
         default="/metrics", alias="SHINWAY_METRICS_PATH"
     )
 
+    # ── Model fallback chain ─────────────────────────────────────────────────
+    # JSON object mapping model name → list of fallback model names.
+    # Example: {"anthropic/claude-opus-4.6":["anthropic/claude-sonnet-4.6","cursor-small"]}
+    # When the primary model exhausts all retries with a transient error,
+    # the proxy tries each fallback in order. Client always sees the original model name.
+    fallback_chain: str = Field(
+        default="{}",
+        alias="SHINWAY_FALLBACK_CHAIN",
+    )
+
     # ── MCP gateway ──────────────────────────────────────────────────────────
     # JSON array of MCP server descriptors: [{"name":"filesystem","url":"http://..."}]
     mcp_servers: str = Field(
