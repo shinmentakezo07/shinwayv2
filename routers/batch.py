@@ -162,9 +162,9 @@ async def create_batch(
 ) -> JSONResponse:
     """Create a new batch and enqueue background processing."""
     api_key = await verify_bearer(authorization)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
     key_rec = await get_key_record(api_key)
-    await enforce_per_key_rate_limit(api_key, key_record=key_rec)
+    await enforce_per_key_rate_limit(api_key, key_record=key_rec, request=request)
     await check_budget(api_key, key_record=key_rec)
 
     payload = await request.json()
@@ -213,11 +213,12 @@ async def create_batch(
 @router.get("/v1/batch/{batch_id}")
 async def get_batch(
     batch_id: str,
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
     """Poll the status of a batch."""
     api_key = await verify_bearer(authorization)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
 
     record = await batch_store.get(batch_id, api_key=api_key)
     if record is None:
@@ -233,11 +234,12 @@ async def get_batch(
 @router.get("/v1/batch/{batch_id}/results", response_model=None)
 async def get_batch_results(
     batch_id: str,
+    request: Request,
     authorization: str | None = Header(default=None),
 ):
     """Fetch completed results as newline-delimited JSON (one object per line)."""
     api_key = await verify_bearer(authorization)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
 
     record = await batch_store.get(batch_id, api_key=api_key)
     if record is None:
@@ -271,11 +273,12 @@ async def get_batch_results(
 @router.post("/v1/batch/{batch_id}/cancel")
 async def cancel_batch(
     batch_id: str,
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
     """Cancel a batch that is still validating or in_progress."""
     api_key = await verify_bearer(authorization)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
 
     record = await batch_store.get(batch_id, api_key=api_key)
     if record is None:
