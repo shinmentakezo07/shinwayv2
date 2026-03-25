@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Git
+.git/
+.gitignore
+
+# Secrets / env
+.env
+.env.*
+
+# Docker files (not needed inside image)
+Dockerfile
+docker-compose.yml
+
+# Admin UI (built and served separately)
+admin-ui/
+
+# Tests
+tests/
+report.xml
+pytest.ini
+
+# Docs / markdown
+*.md
+docs/
+research/
+
+# Dev artefacts
+caht/
+jj
+pw1.md
+testpng/
+*.png
+dump.rdb
+responses.db
+
+# Claude / editor config
+.claude/
+opencode.json
+.playwright-mcp/
+.factory/

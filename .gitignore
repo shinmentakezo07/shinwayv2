@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Node
+**/node_modules/
+**/dist/
+.DS_Store
+
+# Git
+.git/
+
+# Local chat / session logs
+caht/
+
+# Claude worktrees
+.claude/worktrees/
+
+# Factory
+.factory/
+
+# Test screenshots
+testpng/
+
+# Artifacts
+dump.rdb
+pytest.log
+report.xml
+=0.19
+pt.txt
+proxy.log
+responses.db
+*.db
+
+
+.playwright-mcp/
+everything-claude-code
+*.db-shm
+*.db-wal
+keys.db
+everything-claude-code/
+runtime.json

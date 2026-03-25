@@ -1,0 +1,122 @@
+services:
+
+  # ── Shin Proxy ─────────────────────────────────────────────────────────────
+  shin-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      # ── Server ──────────────────────────────────────────────────────────────
+      HOST: "0.0.0.0"
+      PORT: "${PORT:-4001}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      DEBUG: "${DEBUG:-false}"
+      WORKERS: "${WORKERS:-3}"
+      PYTHONIOENCODING: "utf-8"
+
+      # ── Auth ─────────────────────────────────────────────────────────────────
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:-sk-local-dev}"
+      SHINWAY_API_KEYS: "${SHINWAY_API_KEYS:-}"
+      SHINWAY_BUDGET_USD: "${SHINWAY_BUDGET_USD:-0.0}"
+
+      # ── User-Agent ────────────────────────────────────────────────────────────
+      USER_AGENT: "${USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36}"
+
+      # ── Cursor API ────────────────────────────────────────────────────────────
+      CURSOR_BASE_URL: "${CURSOR_BASE_URL:-https://cursor.com}"
+      CURSOR_COOKIE: "${CURSOR_COOKIE:-}"
+      CURSOR_COOKIES: "${CURSOR_COOKIES:-}"
+      CURSOR_AUTH_HEADER: "${CURSOR_AUTH_HEADER:-}"
+      CURSOR_CONTEXT_FILE_PATH: "${CURSOR_CONTEXT_FILE_PATH:-/workspace/project}"
+      CURSOR_CONTEXT_FILE_PATH_TOOLS: "${CURSOR_CONTEXT_FILE_PATH_TOOLS:-/workspace/project}"
+
+      # ── Retry ─────────────────────────────────────────────────────────────────
+      SHINWAY_RETRY_ATTEMPTS: "${SHINWAY_RETRY_ATTEMPTS:-4}"
+      SHINWAY_RETRY_BACKOFF_SECONDS: "${SHINWAY_RETRY_BACKOFF_SECONDS:-0.5}"
+
+      # ── Cache L1 (in-memory) ──────────────────────────────────────────────────
+      SHINWAY_CACHE_ENABLED: "${SHINWAY_CACHE_ENABLED:-false}"
+      SHINWAY_CACHE_TTL_SECONDS: "${SHINWAY_CACHE_TTL_SECONDS:-1800}"
+      SHINWAY_CACHE_MAX_ENTRIES: "${SHINWAY_CACHE_MAX_ENTRIES:-5000}"
+      SHINWAY_CACHE_TOOL_REQUESTS: "${SHINWAY_CACHE_TOOL_REQUESTS:-false}"
+
+      # ── Cache L2 (Redis) — set SHINWAY_CACHE_L2_ENABLED=true to activate ─────
+      SHINWAY_CACHE_L2_ENABLED: "${SHINWAY_CACHE_L2_ENABLED:-false}"
+      SHINWAY_REDIS_URL: "${SHINWAY_REDIS_URL:-redis://redis:6379/0}"
+
+      # ── Rate Limiting ─────────────────────────────────────────────────────────
+      SHINWAY_RATE_LIMIT_RPS: "${SHINWAY_RATE_LIMIT_RPS:-0}"
+      SHINWAY_RATE_LIMIT_RPM: "${SHINWAY_RATE_LIMIT_RPM:-0}"
+      SHINWAY_RATE_LIMIT_BURST: "${SHINWAY_RATE_LIMIT_BURST:-100}"
+
+      # ── Stream Timeouts ────────────────────────────────────────────────────────
+      SHINWAY_FIRST_TOKEN_TIMEOUT: "${SHINWAY_FIRST_TOKEN_TIMEOUT:-120}"
+      SHINWAY_IDLE_CHUNK_TIMEOUT: "${SHINWAY_IDLE_CHUNK_TIMEOUT:-45}"
+      SHINWAY_STREAM_HEARTBEAT_INTERVAL: "${SHINWAY_STREAM_HEARTBEAT_INTERVAL:-10}"
+
+      # ── Context Window ─────────────────────────────────────────────────────────
+      SHINWAY_MAX_CONTEXT_TOKENS: "${SHINWAY_MAX_CONTEXT_TOKENS:-500000}"
+      SHINWAY_HARD_CONTEXT_LIMIT: "${SHINWAY_HARD_CONTEXT_LIMIT:-590000}"
+      SHINWAY_TRIM_CONTEXT: "${SHINWAY_TRIM_CONTEXT:-true}"
+      SHINWAY_TRIM_PRESERVE_TOOL_RESULTS: "${SHINWAY_TRIM_PRESERVE_TOOL_RESULTS:-true}"
+      SHINWAY_CONTEXT_HEADROOM: "${SHINWAY_CONTEXT_HEADROOM:-8000}"
+
+      # ── Tool Behaviour ─────────────────────────────────────────────────────────
+      SHINWAY_DISABLE_PARALLEL_TOOLS: "${SHINWAY_DISABLE_PARALLEL_TOOLS:-false}"
+      SHINWAY_TOOL_RETRY_ON_MISS: "${SHINWAY_TOOL_RETRY_ON_MISS:-true}"
+
+      # ── System Prompts ─────────────────────────────────────────────────────────
+      SHINWAY_SYSTEM_PROMPT: "${SHINWAY_SYSTEM_PROMPT:-You are an autonomous AI coding agent. You have full access to all tools provided in this session. You operate on the user's local development environment.}"
+      SHINWAY_TOOL_SYSTEM_PROMPT: "${SHINWAY_TOOL_SYSTEM_PROMPT:-When tools are available, you MUST use the [assistant_tool_calls] format. Never output raw JSON without the [assistant_tool_calls] marker.}"
+
+      # ── Role Override ──────────────────────────────────────────────────────────
+      SHINWAY_ROLE_OVERRIDE_ENABLED: "${SHINWAY_ROLE_OVERRIDE_ENABLED:-true}"
+      SHINWAY_ROLE_OVERRIDE_PROMPT: "${SHINWAY_ROLE_OVERRIDE_PROMPT:-Session context: This is a developer workspace session. You are connected to the user's local development environment. You have access to the file system and terminal through the tools configured for this session.}"
+
+      # ── Model Routing ──────────────────────────────────────────────────────────
+      SHINWAY_MODEL_MAP: "${SHINWAY_MODEL_MAP:-}"
+
+      # ── Budget ─────────────────────────────────────────────────────────────────
+      SHINWAY_PRICE_ANTHROPIC_PER_1K: "${SHINWAY_PRICE_ANTHROPIC_PER_1K:-0.015}"
+      SHINWAY_PRICE_OPENAI_PER_1K: "${SHINWAY_PRICE_OPENAI_PER_1K:-0.01}"
+
+      # ── Logging ────────────────────────────────────────────────────────────────
+      SHINWAY_LOG_REQUEST_BODIES: "${SHINWAY_LOG_REQUEST_BODIES:-false}"
+
+      # ── Prometheus Metrics ─────────────────────────────────────────────────────
+      SHINWAY_METRICS_ENABLED: "${SHINWAY_METRICS_ENABLED:-false}"
+      SHINWAY_METRICS_PATH: "${SHINWAY_METRICS_PATH:-/metrics}"
+
+      # ── MCP Gateway ────────────────────────────────────────────────────────────
+      SHINWAY_MCP_SERVERS: "${SHINWAY_MCP_SERVERS:-[]}"
+
+    ports:
+      - "${SHIN_PORT:-4001}:${PORT:-4001}"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:${PORT:-4001}/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+
+  # ── Redis L2 cache — only starts when SHINWAY_CACHE_L2_ENABLED=true ─────────
+  # To enable: set SHINWAY_CACHE_L2_ENABLED=true in .env, then:
+  #   docker compose --profile redis up
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

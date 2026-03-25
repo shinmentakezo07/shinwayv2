@@ -1,0 +1,13 @@
+[run]
+omit =
+    tests/*
+    admin-ui/*
+    .venv/*
+    .claude/*
+    multirun.py
+    run.py
+    */site-packages/*
+
+[report]
+show_missing = True
+skip_empty = True
