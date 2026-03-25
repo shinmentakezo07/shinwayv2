@@ -67,6 +67,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from storage.keys import key_store
     await key_store.init()
     log.info("key_store_started")
+    from storage.batch import batch_store
+    await batch_store.init()
+    log.info("batch_store_started")
     from storage.quota import quota_store
     await quota_store.init()
     log.info("quota_store_started")
@@ -77,6 +80,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from storage.keys import key_store
         await key_store.close()
         log.info("key_store_closed")
+        from storage.batch import batch_store
+        await batch_store.close()
+        log.info("batch_store_closed")
         from storage.quota import quota_store
         await quota_store.close()
         log.info("quota_store_closed")
@@ -240,11 +246,13 @@ def create_app() -> FastAPI:
     from routers.openai import router as openai_router
     from routers.anthropic import router as anthropic_router
     from routers.responses import router as responses_router
+    from routers.batch import router as batch_router
 
     app.include_router(internal_router)
     app.include_router(openai_router)
     app.include_router(anthropic_router)
     app.include_router(responses_router)
+    app.include_router(batch_router)
 
     # ── Prometheus metrics ──────────────────────────────────────────────
     if settings.metrics_enabled:
