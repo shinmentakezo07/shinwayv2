@@ -4396,3 +4396,37 @@ Requested feature: full structured request/response lifecycle logging with reque
 | ab9fe002 | refactor(app): replace request_id_middleware with request_context_middleware |
 | 050d44d9 | feat(routers): populate RequestContext with model, stream, api_key_prefix |
 | 81c7a946 | feat(pipeline): emit pipeline_complete structlog event with request_id correlation |
+
+## Session 74 — Retry Middleware: Client-Facing Retry Hints (2026-03-25)
+
+### What changed
+- `middleware/retry.py` — created
+- `middleware/rate_limit.py` — modified
+- `app.py` — modified
+- `routers/openai.py` — modified
+- `routers/anthropic.py` — modified
+- `routers/responses.py` — modified
+- `tests/test_retry_middleware.py` — created
+- `tests/test_unified_router.py` — modified (fixture stubs)
+- `tests/test_routing.py` — modified (fixture stubs)
+- `tests/test_request_validators.py` — modified (fixture stubs)
+
+### Which lines / functions
+- `middleware/retry.py` — new file: `RetryContext` dataclass (`retry_count: int`, `retry_reason: str`), `get_retry_ctx(request)`, `enrich_rate_limit_response(headers, ctx, *, rate_limit, remaining)`
+- `middleware/rate_limit.py` — added `_REASON_NORMALISE` dict, `_set_retry_ctx(request, reason)` helper; added `request: object | None = None` param to `enforce_rate_limit()` and `enforce_per_key_rate_limit()`; both call `_set_retry_ctx` before raising `RateLimitError`
+- `app.py:proxy_error_handler` — added `enrich_rate_limit_response()` call in `RateLimitError` branch; writes `X-Retry-Count`, `X-Retry-Reason`, `X-RateLimit-Limit`, `X-RateLimit-Remaining` to 429 response headers
+- `routers/openai.py:chat_completions`, `text_completions`, `validate_tools` — added `request=request` to both enforce calls
+- `routers/anthropic.py:anthropic_messages`, `count_tokens` — same
+- `routers/responses.py:create_response` — same
+- `tests/test_unified_router.py`, `tests/test_routing.py`, `tests/test_request_validators.py` — updated `bypass_auth`/`bypass_guards`/`bypass` fixture stubs to accept `request=None` so they tolerate the new keyword argument
+
+### Why
+Clients receiving 429s had only `Retry-After` to guide backoff. The new headers (`X-Retry-Count`, `X-Retry-Reason`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`) give clients enough signal to self-throttle intelligently. Architecture follows the `middleware/logging.py` / `RequestContext` pattern: a lightweight dataclass on `request.state`, populated at the point where the limit fires, consumed in the exception handler. No new ASGI middleware class, no new dependencies.
+
+### Commits
+| SHA | Description |
+|-----|-------------|
+| 941499d1 | feat(middleware): add RetryContext, get_retry_ctx, enrich_rate_limit_response |
+| babb0fc8 | feat(rate_limit): populate RetryContext with retry_reason before raising RateLimitError |
+| b0d05bb5 | feat(app): enrich 429 responses with X-Retry-Count, X-Retry-Reason, X-RateLimit-* headers |
+| b4dbbabe | feat(routers): pass request to enforce_rate_limit and enforce_per_key_rate_limit |
