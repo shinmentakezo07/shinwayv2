@@ -63,17 +63,28 @@ def bypass_auth(monkeypatch):
     async def _fake_per_key(key, key_record=None):
         return None
 
-    monkeypatch.setattr("routers.unified.verify_bearer", _fake_verify)
-    monkeypatch.setattr("routers.unified.check_budget", _fake_budget)
-    monkeypatch.setattr("routers.unified.get_key_record", _fake_get_key_record)
-    monkeypatch.setattr("routers.unified.enforce_per_key_rate_limit", _fake_per_key)
-    monkeypatch.setattr("routers.unified.enforce_rate_limit", lambda key: None)
-    monkeypatch.setattr("routers.unified.enforce_allowed_models", lambda rec, model: None)
-    monkeypatch.setattr("routers.unified.resolve_model", lambda m: m or "cursor-small")
-    monkeypatch.setattr("routers.unified.get_http_client", lambda: MagicMock())
-    monkeypatch.setattr("routers.unified.CursorClient", lambda http: MagicMock())
-    monkeypatch.setattr("routers.unified.settings", SimpleNamespace(trim_context=False))
-    monkeypatch.setattr("routers.unified.context_engine", _CTX_ENGINE_STUB)
+    monkeypatch.setattr("routers.openai.verify_bearer", _fake_verify)
+    monkeypatch.setattr("routers.openai.check_budget", _fake_budget)
+    monkeypatch.setattr("routers.openai.get_key_record", _fake_get_key_record)
+    monkeypatch.setattr("routers.openai.enforce_per_key_rate_limit", _fake_per_key)
+    monkeypatch.setattr("routers.openai.enforce_rate_limit", lambda key: None)
+    monkeypatch.setattr("routers.openai.enforce_allowed_models", lambda rec, model: None)
+    monkeypatch.setattr("routers.openai.resolve_model", lambda m: m or "cursor-small")
+    monkeypatch.setattr("routers.openai.get_http_client", lambda: MagicMock())
+    monkeypatch.setattr("routers.openai.CursorClient", lambda http: MagicMock())
+    monkeypatch.setattr("routers.openai.settings", SimpleNamespace(trim_context=False))
+    monkeypatch.setattr("routers.openai.context_engine", _CTX_ENGINE_STUB)
+    monkeypatch.setattr("routers.anthropic.verify_bearer", _fake_verify)
+    monkeypatch.setattr("routers.anthropic.check_budget", _fake_budget)
+    monkeypatch.setattr("routers.anthropic.get_key_record", _fake_get_key_record)
+    monkeypatch.setattr("routers.anthropic.enforce_per_key_rate_limit", _fake_per_key)
+    monkeypatch.setattr("routers.anthropic.enforce_rate_limit", lambda key: None)
+    monkeypatch.setattr("routers.anthropic.enforce_allowed_models", lambda rec, model: None)
+    monkeypatch.setattr("routers.anthropic.resolve_model", lambda m: m or "cursor-small")
+    monkeypatch.setattr("routers.anthropic.get_http_client", lambda: MagicMock())
+    monkeypatch.setattr("routers.anthropic.CursorClient", lambda http: MagicMock())
+    monkeypatch.setattr("routers.anthropic.settings", SimpleNamespace(trim_context=False))
+    monkeypatch.setattr("routers.anthropic.context_engine", _CTX_ENGINE_STUB)
 
 
 @pytest.fixture
@@ -90,7 +101,7 @@ def mock_openai_non_stream(monkeypatch):
         "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
     }
     mock = AsyncMock(return_value=canned)
-    monkeypatch.setattr("routers.unified.handle_openai_non_streaming", mock)
+    monkeypatch.setattr("routers.openai.handle_openai_non_streaming", mock)
     return mock
 
 
@@ -106,7 +117,7 @@ def mock_anthropic_non_stream(monkeypatch):
         "usage": {"input_tokens": 5, "output_tokens": 3},
     }
     mock = AsyncMock(return_value=canned)
-    monkeypatch.setattr("routers.unified.handle_anthropic_non_streaming", mock)
+    monkeypatch.setattr("routers.anthropic.handle_anthropic_non_streaming", mock)
     return mock
 
 
@@ -117,7 +128,7 @@ def mock_openai_stream(monkeypatch):
         yield 'data: {"choices":[{"delta":{"content":"hi"},"index":0}]}\n\n'
         yield 'data: [DONE]\n\n'
 
-    monkeypatch.setattr("routers.unified._openai_stream", _fake)
+    monkeypatch.setattr("routers.openai._openai_stream", _fake)
     return _fake
 
 
@@ -128,7 +139,7 @@ def mock_anthropic_stream(monkeypatch):
         yield 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}}\n\n'
         yield 'data: {"type":"message_stop"}\n\n'
 
-    monkeypatch.setattr("routers.unified._anthropic_stream", _fake)
+    monkeypatch.setattr("routers.anthropic._anthropic_stream", _fake)
     return _fake
 
 
@@ -173,11 +184,11 @@ def test_chat_completions_missing_auth_returns_401(app):
     bypass_auth is function-scoped (monkeypatch) so it IS active here too.
     We undo it by restoring the real function via a direct import before the call.
     """
-    import routers.unified as _unified
+    import routers.openai as _openai_router
     from middleware.auth import verify_bearer as _real_verify
 
-    orig = _unified.verify_bearer
-    _unified.verify_bearer = _real_verify  # type: ignore[assignment]
+    orig = _openai_router.verify_bearer
+    _openai_router.verify_bearer = _real_verify  # type: ignore[assignment]
     try:
         with TestClient(app) as c:
             r = c.post(
@@ -186,7 +197,7 @@ def test_chat_completions_missing_auth_returns_401(app):
             )
         assert r.status_code == 401
     finally:
-        _unified.verify_bearer = orig  # type: ignore[assignment]
+        _openai_router.verify_bearer = orig  # type: ignore[assignment]
 
 
 def test_chat_completions_stream_returns_streaming_response(client, mock_openai_stream):
@@ -213,7 +224,7 @@ def test_chat_completions_invalid_n_returns_400(client):
 
 def test_chat_completions_model_resolved(client, mock_openai_non_stream, monkeypatch):
     """resolve_model result is the model stored in PipelineParams."""
-    monkeypatch.setattr("routers.unified.resolve_model", lambda m: "resolved-model")
+    monkeypatch.setattr("routers.openai.resolve_model", lambda m: "resolved-model")
 
     r = client.post(
         "/v1/chat/completions",
@@ -401,11 +412,11 @@ def test_no_auth_header_returns_401(app):
     Undoes the bypass_auth monkeypatching for this specific test by directly
     restoring the real verify_bearer reference on the routers.unified module.
     """
-    import routers.unified as _unified
+    import routers.openai as _openai_router
     from middleware.auth import verify_bearer as _real_verify
 
-    orig = _unified.verify_bearer
-    _unified.verify_bearer = _real_verify  # type: ignore[assignment]
+    orig = _openai_router.verify_bearer
+    _openai_router.verify_bearer = _real_verify  # type: ignore[assignment]
     try:
         with TestClient(app) as c:
             r = c.post(
@@ -414,4 +425,4 @@ def test_no_auth_header_returns_401(app):
             )
         assert r.status_code == 401
     finally:
-        _unified.verify_bearer = orig  # type: ignore[assignment]
+        _openai_router.verify_bearer = orig  # type: ignore[assignment]

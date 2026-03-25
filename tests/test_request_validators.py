@@ -162,27 +162,26 @@ def app_client():
 def bypass(monkeypatch):
     async def _fake_verify(a): return "test-key"
     async def _fake_budget(k, key_record=None): return None
-    monkeypatch.setattr("routers.unified.verify_bearer", _fake_verify)
-    monkeypatch.setattr("routers.unified.enforce_rate_limit", lambda k: None)
-    monkeypatch.setattr("routers.unified.check_budget", _fake_budget)
-    monkeypatch.setattr("routers.unified.resolve_model", lambda m: m or "cursor-small")
-    async def _fake_get_key_record(k): return None
-    monkeypatch.setattr("routers.unified.get_key_record", _fake_get_key_record)
-    async def _fake_per_key_rate_limit(k, key_record=None): return None
-    monkeypatch.setattr("routers.unified.enforce_per_key_rate_limit", _fake_per_key_rate_limit)
-    monkeypatch.setattr("routers.unified.enforce_allowed_models", lambda rec, m: None)
-    monkeypatch.setattr("routers.unified.get_http_client", lambda: object())
-    monkeypatch.setattr("routers.unified.CursorClient", lambda c: object())
-    monkeypatch.setattr("routers.unified.settings", SimpleNamespace(trim_context=False))
-    monkeypatch.setattr(
-        "routers.unified.context_engine",
-        SimpleNamespace(
-            trim_to_budget=lambda m, model, tools: (m, 0),
-            check_preflight=lambda m, t, model, cm: SimpleNamespace(
-                token_count=0, within_budget=True
-            ),
+    _ctx_stub = SimpleNamespace(
+        trim_to_budget=lambda m, model, tools: (m, 0),
+        check_preflight=lambda m, t, model, cm: SimpleNamespace(
+            token_count=0, within_budget=True
         ),
     )
+    async def _fake_get_key_record(k): return None
+    async def _fake_per_key_rate_limit(k, key_record=None): return None
+    for mod in ("routers.openai", "routers.anthropic"):
+        monkeypatch.setattr(f"{mod}.verify_bearer", _fake_verify)
+        monkeypatch.setattr(f"{mod}.enforce_rate_limit", lambda k: None)
+        monkeypatch.setattr(f"{mod}.check_budget", _fake_budget)
+        monkeypatch.setattr(f"{mod}.resolve_model", lambda m: m or "cursor-small")
+        monkeypatch.setattr(f"{mod}.get_key_record", _fake_get_key_record)
+        monkeypatch.setattr(f"{mod}.enforce_per_key_rate_limit", _fake_per_key_rate_limit)
+        monkeypatch.setattr(f"{mod}.enforce_allowed_models", lambda rec, m: None)
+        monkeypatch.setattr(f"{mod}.get_http_client", lambda: object())
+        monkeypatch.setattr(f"{mod}.CursorClient", lambda c: object())
+        monkeypatch.setattr(f"{mod}.settings", SimpleNamespace(trim_context=False))
+        monkeypatch.setattr(f"{mod}.context_engine", _ctx_stub)
 
 
 def test_openai_empty_messages_400(app_client, bypass):

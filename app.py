@@ -218,11 +218,13 @@ def create_app() -> FastAPI:
 
     # ── Register routers ────────────────────────────────────────────────
     from routers.internal import router as internal_router
-    from routers.unified import router as unified_router
+    from routers.openai import router as openai_router
+    from routers.anthropic import router as anthropic_router
     from routers.responses import router as responses_router
 
     app.include_router(internal_router)
-    app.include_router(unified_router)
+    app.include_router(openai_router)
+    app.include_router(anthropic_router)
     app.include_router(responses_router)
 
     # ── Prometheus metrics ──────────────────────────────────────────────

@@ -19,28 +19,37 @@ def bypass_guards(monkeypatch):
     async def _fake_budget(api_key, key_record=None): return None
     async def _fake_get_key_record(api_key): return None
     async def _fake_enforce_per_key_rate_limit(api_key, key_record=None): return None
-    monkeypatch.setattr("routers.unified.verify_bearer", _fake_verify)
-    monkeypatch.setattr("routers.unified.enforce_rate_limit", lambda api_key: None)
-    monkeypatch.setattr("routers.unified.check_budget", _fake_budget)
-    monkeypatch.setattr("routers.unified.get_key_record", _fake_get_key_record)
-    monkeypatch.setattr("routers.unified.enforce_per_key_rate_limit", _fake_enforce_per_key_rate_limit)
-    monkeypatch.setattr("routers.unified.enforce_allowed_models", lambda key_record, model: None)
-    monkeypatch.setattr("routers.unified.resolve_model", lambda model: model or "cursor-small")
-    monkeypatch.setattr("routers.unified.get_http_client", lambda: object())
-    monkeypatch.setattr("routers.unified.CursorClient", lambda _client: object())
-    monkeypatch.setattr("routers.unified.settings", SimpleNamespace(trim_context=False))
-    monkeypatch.setattr("routers.unified.validate_openai_payload", lambda payload: None)
-    monkeypatch.setattr("routers.unified.validate_anthropic_payload", lambda payload: None)
-    monkeypatch.setattr(
-        "routers.unified.context_engine",
-        SimpleNamespace(
-            trim_to_budget=lambda messages, model, tools: (messages, 0),
-            check_preflight=lambda messages, tools, model, cursor_messages: SimpleNamespace(
-                token_count=0,
-                within_budget=True,
-            ),
+    monkeypatch.setattr("routers.openai.verify_bearer", _fake_verify)
+    monkeypatch.setattr("routers.openai.enforce_rate_limit", lambda api_key: None)
+    monkeypatch.setattr("routers.openai.check_budget", _fake_budget)
+    monkeypatch.setattr("routers.openai.get_key_record", _fake_get_key_record)
+    monkeypatch.setattr("routers.openai.enforce_per_key_rate_limit", _fake_enforce_per_key_rate_limit)
+    monkeypatch.setattr("routers.openai.enforce_allowed_models", lambda key_record, model: None)
+    monkeypatch.setattr("routers.openai.resolve_model", lambda model: model or "cursor-small")
+    monkeypatch.setattr("routers.openai.get_http_client", lambda: object())
+    monkeypatch.setattr("routers.openai.CursorClient", lambda _client: object())
+    monkeypatch.setattr("routers.openai.settings", SimpleNamespace(trim_context=False))
+    monkeypatch.setattr("routers.openai.validate_openai_payload", lambda payload: None)
+    monkeypatch.setattr("routers.anthropic.verify_bearer", _fake_verify)
+    monkeypatch.setattr("routers.anthropic.enforce_rate_limit", lambda api_key: None)
+    monkeypatch.setattr("routers.anthropic.check_budget", _fake_budget)
+    monkeypatch.setattr("routers.anthropic.get_key_record", _fake_get_key_record)
+    monkeypatch.setattr("routers.anthropic.enforce_per_key_rate_limit", _fake_enforce_per_key_rate_limit)
+    monkeypatch.setattr("routers.anthropic.enforce_allowed_models", lambda key_record, model: None)
+    monkeypatch.setattr("routers.anthropic.resolve_model", lambda model: model or "cursor-small")
+    monkeypatch.setattr("routers.anthropic.get_http_client", lambda: object())
+    monkeypatch.setattr("routers.anthropic.CursorClient", lambda _client: object())
+    monkeypatch.setattr("routers.anthropic.settings", SimpleNamespace(trim_context=False))
+    monkeypatch.setattr("routers.anthropic.validate_anthropic_payload", lambda payload: None)
+    _ctx_stub = SimpleNamespace(
+        trim_to_budget=lambda messages, model, tools: (messages, 0),
+        check_preflight=lambda messages, tools, model, cursor_messages: SimpleNamespace(
+            token_count=0,
+            within_budget=True,
         ),
     )
+    monkeypatch.setattr("routers.openai.context_engine", _ctx_stub)
+    monkeypatch.setattr("routers.anthropic.context_engine", _ctx_stub)
 
 
 def test_resolve_model_finds_correct_context_mapping():
@@ -88,8 +97,8 @@ def test_openai_router_normalizes_messages_and_tool_choice(client, monkeypatch, 
             "usage": {},
         }
 
-    monkeypatch.setattr("routers.unified.openai_to_cursor", fake_openai_to_cursor)
-    monkeypatch.setattr("routers.unified.handle_openai_non_streaming", fake_handle_openai_non_streaming)
+    monkeypatch.setattr("routers.openai.openai_to_cursor", fake_openai_to_cursor)
+    monkeypatch.setattr("routers.openai.handle_openai_non_streaming", fake_handle_openai_non_streaming)
 
     response_with_tools = client.post(
         "/v1/chat/completions",
@@ -170,8 +179,8 @@ def test_anthropic_router_normalizes_messages_and_tool_choice(client, monkeypatc
             "usage": {},
         }
 
-    monkeypatch.setattr("routers.unified.anthropic_to_cursor", fake_anthropic_to_cursor)
-    monkeypatch.setattr("routers.unified.handle_anthropic_non_streaming", fake_handle_anthropic_non_streaming)
+    monkeypatch.setattr("routers.anthropic.anthropic_to_cursor", fake_anthropic_to_cursor)
+    monkeypatch.setattr("routers.anthropic.handle_anthropic_non_streaming", fake_handle_anthropic_non_streaming)
 
     response_with_tools = client.post(
         "/v1/messages",
