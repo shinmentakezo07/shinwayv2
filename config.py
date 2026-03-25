@@ -516,6 +516,14 @@ class Settings(BaseSettings):
         description="Fraction of requests to emit request_end log (1.0 = all, 0.1 = 10%).",
     )
 
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    # Disabled by default — server-to-server usage needs no CORS headers.
+    # Enable for browser clients (admin UIs, web playgrounds).
+    cors_enabled: bool = Field(default=False, alias="SHINWAY_CORS_ENABLED")
+    # Comma-separated allowed origins. Use "*" to allow all origins.
+    # Example: "https://admin.example.com,https://app.example.com"
+    cors_origins: str = Field(default="*", alias="SHINWAY_CORS_ORIGINS")
+
     # ── Prometheus metrics ───────────────────────────────────────────────────
     metrics_enabled: bool = Field(
         default=False, alias="SHINWAY_METRICS_ENABLED"
