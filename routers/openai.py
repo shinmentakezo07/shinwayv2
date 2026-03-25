@@ -128,9 +128,9 @@ async def chat_completions(
     from middleware.logging import get_ctx as _get_ctx
     if _ctx := _get_ctx(request):
         _ctx.set_api_key(api_key)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
     key_rec = await get_key_record(api_key)
-    await enforce_per_key_rate_limit(api_key, key_record=key_rec)
+    await enforce_per_key_rate_limit(api_key, key_record=key_rec, request=request)
     await check_budget(api_key, key_record=key_rec)
 
     payload = await request.json()
@@ -248,9 +248,9 @@ async def text_completions(
 ):
     """Legacy text completion — wraps chat completions."""
     api_key = await verify_bearer(authorization)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
     key_rec = await get_key_record(api_key)
-    await enforce_per_key_rate_limit(api_key, key_record=key_rec)
+    await enforce_per_key_rate_limit(api_key, key_record=key_rec, request=request)
     await check_budget(api_key, key_record=key_rec)
 
     payload = await request.json()
@@ -307,7 +307,7 @@ async def validate_tools(
 ):
     """Validate tool schemas using LiteLLM's validator."""
     api_key = await verify_bearer(authorization)
-    enforce_rate_limit(api_key)
+    enforce_rate_limit(api_key, request=request)
     payload = await request.json()
     tools_raw = payload.get("tools", [])
     model = resolve_model(payload.get("model"))

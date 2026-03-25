@@ -60,14 +60,14 @@ def bypass_auth(monkeypatch):
     async def _fake_get_key_record(key):
         return None
 
-    async def _fake_per_key(key, key_record=None):
+    async def _fake_per_key(key, key_record=None, request=None):
         return None
 
     monkeypatch.setattr("routers.openai.verify_bearer", _fake_verify)
     monkeypatch.setattr("routers.openai.check_budget", _fake_budget)
     monkeypatch.setattr("routers.openai.get_key_record", _fake_get_key_record)
     monkeypatch.setattr("routers.openai.enforce_per_key_rate_limit", _fake_per_key)
-    monkeypatch.setattr("routers.openai.enforce_rate_limit", lambda key: None)
+    monkeypatch.setattr("routers.openai.enforce_rate_limit", lambda key, request=None: None)
     monkeypatch.setattr("routers.openai.enforce_allowed_models", lambda rec, model: None)
     monkeypatch.setattr("routers.openai.resolve_model", lambda m: m or "cursor-small")
     monkeypatch.setattr("routers.openai.get_http_client", lambda: MagicMock())
@@ -78,7 +78,7 @@ def bypass_auth(monkeypatch):
     monkeypatch.setattr("routers.anthropic.check_budget", _fake_budget)
     monkeypatch.setattr("routers.anthropic.get_key_record", _fake_get_key_record)
     monkeypatch.setattr("routers.anthropic.enforce_per_key_rate_limit", _fake_per_key)
-    monkeypatch.setattr("routers.anthropic.enforce_rate_limit", lambda key: None)
+    monkeypatch.setattr("routers.anthropic.enforce_rate_limit", lambda key, request=None: None)
     monkeypatch.setattr("routers.anthropic.enforce_allowed_models", lambda rec, model: None)
     monkeypatch.setattr("routers.anthropic.resolve_model", lambda m: m or "cursor-small")
     monkeypatch.setattr("routers.anthropic.get_http_client", lambda: MagicMock())

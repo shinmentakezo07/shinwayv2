@@ -169,10 +169,10 @@ def bypass(monkeypatch):
         ),
     )
     async def _fake_get_key_record(k): return None
-    async def _fake_per_key_rate_limit(k, key_record=None): return None
+    async def _fake_per_key_rate_limit(k, key_record=None, request=None): return None
     for mod in ("routers.openai", "routers.anthropic"):
         monkeypatch.setattr(f"{mod}.verify_bearer", _fake_verify)
-        monkeypatch.setattr(f"{mod}.enforce_rate_limit", lambda k: None)
+        monkeypatch.setattr(f"{mod}.enforce_rate_limit", lambda k, request=None: None)
         monkeypatch.setattr(f"{mod}.check_budget", _fake_budget)
         monkeypatch.setattr(f"{mod}.resolve_model", lambda m: m or "cursor-small")
         monkeypatch.setattr(f"{mod}.get_key_record", _fake_get_key_record)
