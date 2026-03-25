@@ -4454,3 +4454,36 @@ Browser-based clients (admin UIs, web playgrounds) hitting the proxy directly we
 | f736c312 | feat(config): add SHINWAY_CORS_ENABLED and SHINWAY_CORS_ORIGINS settings |
 | d69b5433 | test(cors): write failing CORS tests for config fields and middleware wiring |
 | 827cb05e | feat(app): register CORSMiddleware when SHINWAY_CORS_ENABLED=true |
+
+## Session 76 — Sliding Window SQLite Token Quota Middleware (2026-03-25)
+
+### What changed
+- `storage/quota.py` — created: `QuotaStore` with `init`, `close`, `record`, `get_usage_24h`, `prune_old`; module-level `quota_store` singleton
+- `middleware/quota.py` — created: `check_quota`, `record_quota_usage`
+- `config.py` — added `quota_enabled` field aliased to `SHINWAY_QUOTA_ENABLED`
+- `app.py` — wired `quota_store.init()` and `quota_store.close()` into `_lifespan`
+- `middleware/auth.py` — replaced in-process analytics counter with `check_quota` call when `settings.quota_enabled`
+- `pipeline/record.py` — added `from config import settings` import; added `record_quota_usage` call after `analytics.record()`
+- `tests/test_quota.py` — created: 22 tests covering `QuotaStore` (storage layer) and `check_quota`/`record_quota_usage` (middleware layer)
+
+### Which lines / functions
+- `storage/quota.py:QuotaStore` — WAL-mode aiosqlite store; `record()` inserts one row per call, prunes every 100 inserts; `get_usage_24h()` uses strict `> now-86400` window; `prune_old()` deletes `<= now-86400`
+- `middleware/quota.py:check_quota` — reads `quota_store.get_usage_24h`, raises `RateLimitError` at `>= limit`, logs WARNING at 80% threshold
+- `middleware/quota.py:record_quota_usage` — calls `quota_store.record`, silently suppresses SQLite failures, no-ops on `tokens <= 0`
+- `config.py:Settings.quota_enabled` — `bool = Field(default=False, alias="SHINWAY_QUOTA_ENABLED")`
+- `app.py:_lifespan` — `quota_store.init()` after `key_store.init()`; `quota_store.close()` before `response_store.close()`
+- `middleware/auth.py:check_budget` — lines 178-186: quota branch added; when `settings.quota_enabled`, calls `check_quota` instead of `analytics.get_daily_tokens`
+- `pipeline/record.py:_record` — added `from config import settings` to imports; lines 51-53: `record_quota_usage` called after `analytics.record()` when `quota_enabled`
+
+### Why
+The in-process daily token counter (`analytics.get_daily_tokens`) resets on every process restart, making `token_limit_daily` enforcement unreliable in multi-worker and Docker deployments. The new SQLite sliding window survives restarts, enforces a true 24-hour rolling window per API key, and is opt-in (`SHINWAY_QUOTA_ENABLED=false` by default) so existing deployments are completely unaffected.
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| 5c6480e0 | feat(storage): add QuotaStore — sliding window token quota SQLite store |
+| 86f3d260 | feat(middleware): add check_quota and record_quota_usage |
+| 7496522e | feat(config): add SHINWAY_QUOTA_ENABLED setting |
+| 3ce8714a | feat(app): init and close quota_store in lifespan |
+| 7c5f1afd | feat(auth): wire check_quota into check_budget for persistent sliding window quota |
+| 3080633a | feat(pipeline): call record_quota_usage after each completed response |
