@@ -10,6 +10,7 @@ import structlog
 from config import settings
 from cursor.client import CursorClient
 from handlers import BackendError, CredentialError, ProxyError, RateLimitError, TimeoutError
+from pipeline.fallback import FallbackChain
 from pipeline.params import PipelineParams
 
 
@@ -101,10 +102,20 @@ async def _call_with_retry(
     params: PipelineParams,
     anthropic_tools: list[dict] | None,
 ) -> str:
-    """Non-streaming call with unified retry logic."""
+    """Non-streaming call with unified retry + fallback chain logic.
+
+    Flow:
+    1. Attempt the primary model up to settings.retry_attempts times with backoff.
+    2. If all primary attempts are exhausted with a fallback-eligible error,
+       iterate the fallback chain in order, attempting each fallback model once.
+    3. If all fallbacks are also exhausted, raise BackendError.
+    4. AuthError and other non-transient errors propagate immediately — no fallback.
+    """
+    fallback_chain = FallbackChain(settings.fallback_chain)
     last_exc: Exception | None = None
     max_attempts = settings.retry_attempts
 
+    # ── Primary model attempts ──────────────────────────────────────────────
     for attempt in range(max_attempts):
         try:
             return await client.call(
@@ -129,7 +140,38 @@ async def _call_with_retry(
                 await asyncio.sleep(backoff)
             continue
 
-    # Exhausted all retries
-    if isinstance(last_exc, ProxyError):
-        raise last_exc
+    # ── Fallback chain ──────────────────────────────────────────────────────
+    # Only enter the fallback path if the last primary-model error is a
+    # transient upstream failure — auth errors and other non-retryable errors
+    # are re-raised immediately without trying fallbacks.
+    if last_exc is not None and not fallback_chain.should_fallback(last_exc):
+        if isinstance(last_exc, ProxyError):
+            raise last_exc
+        raise BackendError(f"All {max_attempts} upstream attempts failed: {last_exc}")
+
+    for fallback_model in fallback_chain.get_fallbacks(params.model):
+        fallback_params = replace(params, model=fallback_model, fallback_model=fallback_model)
+        try:
+            result = await client.call(
+                fallback_params.cursor_messages,
+                fallback_params.model,
+                anthropic_tools,
+            )
+            log.info(
+                "fallback_model_used",
+                original_model=params.model,
+                fallback_model=fallback_model,
+                primary_error=str(last_exc)[:120],
+            )
+            return result
+        except _RETRYABLE as exc:
+            last_exc = exc
+            log.debug(
+                "fallback_model_failed",
+                fallback_model=fallback_model,
+                error=str(exc)[:120],
+            )
+            continue
+
+    # Exhausted primary retries and all fallbacks — always surface as BackendError
     raise BackendError(f"All {max_attempts} upstream attempts failed: {last_exc}")
