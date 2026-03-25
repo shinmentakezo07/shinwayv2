@@ -125,6 +125,9 @@ async def chat_completions(
 ):
     """OpenAI-compatible chat completions — streaming and non-streaming."""
     api_key = await verify_bearer(authorization)
+    from middleware.logging import get_ctx as _get_ctx
+    if _ctx := _get_ctx(request):
+        _ctx.set_api_key(api_key)
     enforce_rate_limit(api_key)
     key_rec = await get_key_record(api_key)
     await enforce_per_key_rate_limit(api_key, key_record=key_rec)
@@ -135,6 +138,9 @@ async def chat_completions(
 
     stream = bool(payload.get("stream", False))
     model = resolve_model(payload.get("model"))
+    if _ctx := _get_ctx(request):
+        _ctx.model = model
+        _ctx.stream = stream
     enforce_allowed_models(key_rec, model)
 
     messages = payload.get("messages", [])
