@@ -4345,3 +4345,23 @@ User requested a real-time tracking view alongside the 5m/30m/1h window buttons.
 | SHA | Description |
 |-----|-------------|
 | fd6d2b01 | feat(admin-ui): LIVE window tab — real-time tracking panel with gauges and request feed |
+
+## Session 72 — Converter split: shims (Tasks 11-13) (2026-03-25)
+
+### What changed
+- `converters/to_cursor.py` — replaced 799-line implementation with a thin shim (33 lines)
+- `converters/from_cursor.py` — replaced 427-line implementation with a shim that owns patch-target functions verbatim and re-exports simple chunk formatters from sub-modules
+
+### Which lines / functions
+- `converters/to_cursor.py` — re-exports `openai_to_cursor` from `to_cursor_openai`, aliases `anthropic_to_the_editor` → `anthropic_to_cursor`, re-exports `anthropic_messages_to_openai`, `parse_system` from `to_cursor_anthropic`, and all helpers from `cursor_helpers`
+- `converters/from_cursor.py` — owns verbatim: `_safe_pct`, `context_window_for`, `litellm`, `openai_non_streaming_response`, `openai_usage_chunk`, `anthropic_message_start`, `anthropic_non_streaming_response`, `convert_tool_calls_to_anthropic`, `split_visible_reasoning`, `scrub_support_preamble`, `sanitize_visible_text`; re-exports `openai_chunk`, `openai_sse`, `openai_done`, `anthropic_sse_event`, `anthropic_content_block_*`, `anthropic_message_delta`, `anthropic_message_stop` from sub-modules
+
+### Why
+- Tasks 11-13 of the converter split plan: make both files thin shims so all existing importers continue working with zero changes
+- `from_cursor.py` must own the patch-target functions (`context_window_for`, `litellm`) because tests use `patch.object(converters.from_cursor, ...)` — re-exporting from sub-modules would make those patches miss the live bindings
+- `to_cursor_anthropic.py` defines `anthropic_to_the_editor` (underscore, valid Python identifier); shim aliases it back to `anthropic_to_cursor` which all callers use
+
+### Commits
+| SHA | Description |
+|-----|-------------|
+| 9a4efbb7 | refactor(converters): replace to_cursor and from_cursor with thin shims |
