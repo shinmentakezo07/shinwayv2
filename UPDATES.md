@@ -4487,3 +4487,35 @@ The in-process daily token counter (`analytics.get_daily_tokens`) resets on ever
 | 3ce8714a | feat(app): init and close quota_store in lifespan |
 | 7c5f1afd | feat(auth): wire check_quota into check_budget for persistent sliding window quota |
 | 3080633a | feat(pipeline): call record_quota_usage after each completed response |
+
+## Session 77 — Model Fallback Chain (2026-03-25)
+
+### What changed
+- `tests/test_fallback.py` — created: 24 unit tests covering `FallbackChain.get_fallbacks`, `FallbackChain.should_fallback`, `PipelineParams.fallback_model`, `_call_with_retry` fallback integration, and config field
+- `config.py` — added `fallback_chain: str` field, default `"{}"`, alias `SHINWAY_FALLBACK_CHAIN`
+- `pipeline/fallback.py` — created: `FallbackChain` class with `get_fallbacks(model)` and `should_fallback(exc)`; `_FALLBACK_ELIGIBLE` tuple
+- `pipeline/params.py` — added `fallback_model: str | None = None` field to `PipelineParams`
+- `pipeline/suppress.py` — `_call_with_retry` extended with fallback loop after primary retry exhaustion; imports `FallbackChain`; logs `fallback_model_used` at INFO level and `fallback_model_failed` at DEBUG
+- `pipeline/__init__.py` — re-exports `FallbackChain`
+
+### Which lines / functions
+- `pipeline/fallback.py:FallbackChain.__init__` — parses `chain_json` via `json.loads`; raises `ValueError` with `SHINWAY_FALLBACK_CHAIN` in message on invalid JSON or non-object top level
+- `pipeline/fallback.py:FallbackChain.get_fallbacks` — returns `list(self._chain.get(model, []))` — always a copy, never the internal reference
+- `pipeline/fallback.py:FallbackChain.should_fallback` — `isinstance(exc, (RateLimitError, BackendError, TimeoutError))`
+- `pipeline/params.py:PipelineParams.fallback_model` — line 30: `fallback_model: str | None = None`; internal-only field, never read by router or converter layer
+- `pipeline/suppress.py:_call_with_retry` — lines 100-175: `FallbackChain` constructed once per call from `settings.fallback_chain`; primary retry loop unchanged; after primary exhaustion, `should_fallback(last_exc)` gates entry to fallback loop; each fallback model gets exactly one attempt via `replace(params, model=fb, fallback_model=fb)`; final exhaustion always raises `BackendError`
+- `config.py:Settings.fallback_chain` — `str = Field(default="{}", alias="SHINWAY_FALLBACK_CHAIN")`
+- `pipeline/__init__.py` — line 17: `from pipeline.fallback import FallbackChain  # noqa: F401`
+
+### Why
+When the primary model is rate-limited or returns persistent backend errors across all retries, previously the proxy raised `BackendError` immediately. The fallback chain allows operators to configure successive fallback models (`SHINWAY_FALLBACK_CHAIN` JSON env var) so requests survive upstream model-level outages transparently. The client always sees the originally-requested model name — fallback is fully internal. `AuthError` and non-transient errors bypass the fallback path entirely. Default config (`{}`) is a no-op: behaviour identical to before for all existing deployments.
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| 230f1f51 | test(pipeline): add failing tests for FallbackChain and fallback integration |
+| 22550050 | feat(config): add SHINWAY_FALLBACK_CHAIN setting for model fallback chain |
+| 10f8cdbf | feat(pipeline): add FallbackChain module for model fallback chain |
+| 0e298ae1 | feat(pipeline): add fallback_model field to PipelineParams |
+| bf857566 | feat(pipeline): wire FallbackChain into _call_with_retry for model fallback |
+| c978717c | refactor(pipeline): re-export FallbackChain from pipeline package |
