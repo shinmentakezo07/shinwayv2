@@ -67,6 +67,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from storage.keys import key_store
     await key_store.init()
     log.info("key_store_started")
+    from storage.quota import quota_store
+    await quota_store.init()
+    log.info("quota_store_started")
 
     try:
         yield
@@ -74,6 +77,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from storage.keys import key_store
         await key_store.close()
         log.info("key_store_closed")
+        from storage.quota import quota_store
+        await quota_store.close()
+        log.info("quota_store_closed")
         await response_store.close()
         log.info("response_store_closed")
         await _http_client.aclose()
