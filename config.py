@@ -546,5 +546,11 @@ class Settings(BaseSettings):
         default=False, alias="SHINWAY_DISABLE_LITELLM_TOKEN_COUNTING"
     )
 
+    # ── Quota ────────────────────────────────────────────────────────────────
+    # When enabled, per-key token_limit_daily is enforced via a persistent
+    # SQLite sliding window (quota.db) instead of the in-process counter.
+    # Default off — set SHINWAY_QUOTA_ENABLED=true to activate.
+    quota_enabled: bool = Field(default=False, alias="SHINWAY_QUOTA_ENABLED")
+
 
 settings = Settings()
