@@ -165,22 +165,52 @@ _per_key_limiters: LRUCache = LRUCache(maxsize=10_000)
 _per_key_lock = asyncio.Lock()
 
 
-def enforce_rate_limit(api_key: str) -> None:
+# ── Retry context helpers ─────────────────────────────────────────────────
+
+_REASON_NORMALISE = {
+    "RPS limit exceeded": "rps",
+    "RPM limit exceeded": "rpm",
+    "Per-key rate limit exceeded: RPS limit exceeded": "rps",
+    "Per-key rate limit exceeded: RPM limit exceeded": "rpm",
+}
+
+
+def _set_retry_ctx(request: object | None, reason: str) -> None:
+    """Populate request.state.retry with RetryContext if request is provided.
+
+    Idempotent — creates the context on first call, updates reason on subsequent
+    calls (suppression retry path may call this more than once per request).
+    """
+    if request is None:
+        return
+    from middleware.retry import RetryContext, get_retry_ctx
+    ctx = get_retry_ctx(request)  # type: ignore[arg-type]
+    if ctx is None:
+        ctx = RetryContext()
+        request.state.retry = ctx  # type: ignore[union-attr]
+    # Normalise verbose bucket reason to short token for clients
+    ctx.retry_reason = _REASON_NORMALISE.get(reason, reason)
+
+
+def enforce_rate_limit(api_key: str, request: object | None = None) -> None:
     """Enforce RPS + RPM rate limits for the given API key.
 
     All unauthenticated/anonymous requests share the 'anonymous' bucket.
     Raises RateLimitError with an accurate retry_after computed from bucket state.
+    Populates request.state.retry with RetryContext when request is provided.
     """
     key = api_key or "anonymous"
     allowed, reason, retry_after = _limiter.consume(key)
     if not allowed:
         log.warning("rate_limit_exceeded", api_key=key, reason=reason, retry_after=retry_after)
+        _set_retry_ctx(request, reason)
         raise RateLimitError(f"Rate limit exceeded: {reason}", retry_after=max(retry_after, 1.0))
 
 
 async def enforce_per_key_rate_limit(
     api_key: str,
     key_record: dict | None = None,
+    request: object | None = None,
 ) -> None:
     """Enforce per-key RPS/RPM limits if configured in KeyStore.
 
@@ -188,6 +218,7 @@ async def enforce_per_key_rate_limit(
     If None, fetches from store (backwards-compatible fallback).
     Only applies when the key has explicit limits set (> 0).
     Keys with 0 limits fall through to the global rate limiter.
+    Populates request.state.retry with RetryContext when request is provided.
     """
     rec = key_record
     if rec is None:
@@ -216,4 +247,5 @@ async def enforce_per_key_rate_limit(
     allowed, reason, retry_after = limiter.consume(api_key)
     if not allowed:
         log.warning("per_key_rate_limit_exceeded", api_key=api_key[:16], reason=reason, retry_after=retry_after)
+        _set_retry_ctx(request, f"Per-key rate limit exceeded: {reason}")
         raise RateLimitError(f"Per-key rate limit exceeded: {reason}", retry_after=max(retry_after, 1.0))
