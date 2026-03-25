@@ -114,6 +114,16 @@ def create_app() -> FastAPI:
         headers: dict[str, str] = {}
         if isinstance(exc, _RateLimitError):
             headers["Retry-After"] = str(int(exc.retry_after))
+            from middleware.retry import enrich_rate_limit_response, get_retry_ctx
+            # Effective capacity: prefer RPM (minute-scale) as the capacity signal;
+            # fall back to RPS burst if RPM is disabled (0).
+            _rate_limit = int(settings.rate_limit_rpm) or int(settings.rate_limit_rps) or 0
+            enrich_rate_limit_response(
+                headers,
+                get_retry_ctx(request),
+                rate_limit=_rate_limit,
+                remaining=0,
+            )
         return JSONResponse(status_code=exc.status_code, content=body, headers=headers)
 
     @app.exception_handler(FastAPIValidationError)
