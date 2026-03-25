@@ -182,6 +182,23 @@ def create_app() -> FastAPI:
     # ── Middleware: gzip compression for non-streaming responses ────────
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+    # ── Middleware: CORS — only registered when explicitly enabled ───────
+    # Disabled by default: server-to-server clients need no CORS headers,
+    # and registering CORSMiddleware unconditionally adds latency + header
+    # noise to every response. Enable via SHINWAY_CORS_ENABLED=true.
+    if settings.cors_enabled:
+        from starlette.middleware.cors import CORSMiddleware
+
+        allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allowed_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        log.info("cors_enabled", origins=allowed_origins)
+
     # ── Middleware: request body size limit ─────────────────────────────
     if settings.max_request_body_bytes > 0:
         @app.middleware("http")
