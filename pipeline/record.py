@@ -4,6 +4,7 @@ from __future__ import annotations
 import structlog
 
 from analytics import RequestLog, analytics, estimate_cost
+from config import settings
 from tokens import count_message_tokens, estimate_from_text
 from pipeline.params import PipelineParams
 
@@ -47,6 +48,9 @@ async def _record(
             output_tps=output_tps,
         )
     )
+    if settings.quota_enabled and params.api_key:
+        from middleware.quota import record_quota_usage
+        await record_quota_usage(params.api_key, tokens=input_tokens + output_tokens)
     log.info(
         "pipeline_complete",
         request_id=params.request_id,
