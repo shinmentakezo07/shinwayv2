@@ -510,6 +510,11 @@ class Settings(BaseSettings):
     log_request_bodies: bool = Field(
         default=False, alias="SHINWAY_LOG_REQUEST_BODIES"
     )
+    log_sample_rate: float = Field(
+        default=1.0,
+        alias="SHINWAY_LOG_SAMPLE_RATE",
+        description="Fraction of requests to emit request_end log (1.0 = all, 0.1 = 10%).",
+    )
 
     # ── Prometheus metrics ───────────────────────────────────────────────────
     metrics_enabled: bool = Field(
