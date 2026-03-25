@@ -27,3 +27,4 @@ class PipelineParams:
     thinking_budget_tokens: int | None = None  # Anthropic extended thinking budget
     stop: list[str] | None = None  # stop sequences requested by client (informational — not enforced upstream)
     request_id: str = ""  # propagated from request_id middleware
+    fallback_model: str | None = None  # set by _call_with_retry when a fallback is active; None on primary
