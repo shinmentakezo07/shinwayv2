@@ -14,6 +14,7 @@ from tools.parse import (  # noqa: F401
 )
 from pipeline.params import PipelineParams
 from pipeline.record import _provider_from_model, _record  # noqa: F401
+from pipeline.fallback import FallbackChain  # noqa: F401
 from pipeline.suppress import (
     _SUPPRESSION_SIGNALS,  # noqa: F401
     _SUPPRESSION_PERSONA_SIGNALS,  # noqa: F401
