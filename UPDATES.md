@@ -4552,3 +4552,28 @@ OpenAI Batch API support for fire-and-forget agentic workflows that submit multi
 |-----|-------------|
 | 207375cd | feat(batch): add OpenAI-compatible Batch API |
 | 0d734ffa | feat(app): register batch_router and init/close batch_store in lifespan |
+
+## Session 79 — Admin UI: Credentials & Login UI Overhaul (2026-03-25)
+
+### What changed
+- `admin-ui/app/(dashboard)/credentials/page.tsx` — full redesign: filter tabs (All/Healthy/Unhealthy/Cooldown), shimmer skeleton, richer empty state with CTA, cleaner header layout
+- `admin-ui/components/credentials/CredentialCard.tsx` — added `cc-id-block` with SESSION TOKEN label, request load usage bar, `cursor-default` on metric cells, status-color CSS variable for hover glow, tighter stripe and top-glow
+- `admin-ui/components/credentials/PoolSummaryBar.tsx` — replaced Activity icon orb with animated SVG arc health ring (`HealthRing`), vertical dividers, stacked action buttons, animated segment bar entrance
+- `admin-ui/app/login/page.tsx` — complete visual overhaul: split-panel layout (info left / auth right on ≥960px), green accent theme, corner accents, scanline overlay, spotlight glow, lock icon auth header, green-caret input, accent-green submit button
+- `admin-ui/app/login/page.tsx` — fixed auto-login stale closure bug: extracted `attemptLogin(adminKey)` plain function, both `handleSubmit` and auto-login effect call it directly with explicit key argument
+- `admin-ui/app/login/page.tsx` — removed `LITELLM_MASTER_KEY` label, replaced with `ADMIN KEY`
+
+### Which lines / functions
+- `credentials/page.tsx:CredentialsPage` — filter state, `filteredCreds`, `TABS` array, shimmer skeleton with `cp-shimmer` keyframe, empty state CTA button
+- `CredentialCard.tsx:CredentialCard` — `cc-id-block`, `cc-usage-wrap`/`cc-usage-fill`, `cc-footer-left`/`cc-footer-dot`, `--status-fg`/`--status-glow` CSS vars
+- `PoolSummaryBar.tsx:HealthRing` — new SVG arc component with `motion.circle` animated `strokeDasharray`
+- `PoolSummaryBar.tsx:PoolSummaryBar` — `psb-ring-block`, `psb-vdivider`, `psb-counts`, `psb-seg-block`, `psb-actions` vertical stack
+- `login/page.tsx:attemptLogin` — extracted from `handleSubmit`, takes explicit `adminKey` param
+- `login/page.tsx:LoginPage` — `lp-panel-left`, `lp-form-wrap`, `lp-auth-header`, `lp-auth-icon`, `Scanlines`, `Spotlight`, `CornerAccent`
+
+### Why
+UI enhancement pass: richer data visualization, filter UX, animated health ring, and a premium split-panel login page. Auto-login stale closure was causing silent failure when `NEXT_PUBLIC_DEFAULT_ADMIN_KEY` was set.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|

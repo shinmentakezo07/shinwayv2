@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import api from '@/lib/api'
 import { toast } from 'sonner'
-import { RefreshCw, ShieldCheck, Activity } from 'lucide-react'
+import { RefreshCw, ShieldCheck } from 'lucide-react'
 import type { ValidationResult } from '@/lib/types'
 
 interface Props {
@@ -11,6 +12,39 @@ interface Props {
   healthyCount: number
   onValidated: (results: ValidationResult[]) => void
   onReset: () => void
+}
+
+// SVG arc ring: r=22, cx=cy=28, circumference≈138.2
+const RADIUS = 22
+const CX = 28
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+
+function HealthRing({ pct, color }: { pct: number; color: string }) {
+  const filled = (pct / 100) * CIRCUMFERENCE
+  const gap    = CIRCUMFERENCE - filled
+  return (
+    <svg width={56} height={56} viewBox="0 0 56 56" style={{ transform: 'rotate(-90deg)' }}>
+      {/* Track */}
+      <circle
+        cx={CX} cy={CX} r={RADIUS}
+        fill="none"
+        stroke="rgba(255,255,255,0.06)"
+        strokeWidth={4}
+      />
+      {/* Fill */}
+      <motion.circle
+        cx={CX} cy={CX} r={RADIUS}
+        fill="none"
+        stroke={color}
+        strokeWidth={4}
+        strokeLinecap="round"
+        initial={{ strokeDasharray: `0 ${CIRCUMFERENCE}` }}
+        animate={{ strokeDasharray: `${filled} ${gap}` }}
+        transition={{ duration: 0.9, ease: 'easeOut' }}
+        style={{ filter: pct === 100 ? `drop-shadow(0 0 5px ${color})` : 'none' }}
+      />
+    </svg>
+  )
 }
 
 export function PoolSummaryBar({ poolSize, healthyCount, onValidated, onReset }: Props) {
@@ -52,94 +86,84 @@ export function PoolSummaryBar({ poolSize, healthyCount, onValidated, onReset }:
   const segments     = poolSize > 0 ? Array.from({ length: poolSize }, (_, i) => i < healthyCount) : []
 
   return (
-    <div className="psb-root">
-      {/* ambient top shimmer — color is dynamic, stays inline */}
+    <div className="psb-root" style={{ '--s-color': statusColor } as React.CSSProperties}>
+      {/* Top shimmer line */}
       <div
-        className="psb-sheen"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${statusColor}22 40%, ${statusColor}22 60%, transparent)`,
-        }}
+        className="psb-shimmer"
+        style={{ background: `linear-gradient(90deg, transparent, ${statusColor}28 40%, ${statusColor}28 60%, transparent)` }}
       />
 
       <div className="psb-inner">
 
-        {/* ── Left: status icon + numbers ── */}
-        <div className="psb-left">
-          {/* Status orb */}
-          <div
-            className="psb-orb"
-            style={{
-              background: `radial-gradient(circle at 40% 35%, ${statusColor}20 0%, ${statusColor}08 60%, transparent 100%)`,
-              border: `1px solid ${statusColor}30`,
-              boxShadow: isFullHealth ? `0 0 20px ${statusColor}18` : 'none',
-            }}
-          >
-            <Activity size={18} style={{ color: statusColor }} />
-          </div>
-
-          {/* Healthy / Unhealthy counts */}
-          <div className="psb-counts">
-            <div>
-              <div className="psb-count-val" style={{ color: statusColor }}>
-                {healthyCount}
-              </div>
-              <div className="psb-count-label">Healthy</div>
-            </div>
-            <div className="psb-divider" />
-            <div>
-              <div
-                className="psb-count-val"
-                style={{ color: unhealthy > 0 ? '#f87171' : 'rgba(255,255,255,0.18)' }}
-              >
-                {unhealthy}
-              </div>
-              <div className="psb-count-label">Unhealthy</div>
+        {/* ── Ring + status ── */}
+        <div className="psb-ring-block">
+          <div className="psb-ring-wrap">
+            <HealthRing pct={healthPct} color={statusColor} />
+            <div className="psb-ring-center">
+              <span className="psb-ring-pct" style={{ color: statusColor }}>
+                {Math.round(healthPct)}%
+              </span>
             </div>
           </div>
-
-          {/* Status badge */}
-          {poolSize > 0 && (
+          <div className="psb-ring-meta">
             <div
-              className="psb-badge"
-              style={{
-                background: `${statusColor}0f`,
-                border: `1px solid ${statusColor}30`,
-              }}
+              className="psb-status-badge"
+              style={{ background: `${statusColor}10`, border: `1px solid ${statusColor}28` }}
             >
               <div
                 className={`psb-badge-dot${isFullHealth ? ' psb-badge-dot--pulse' : ''}`}
-                style={{
-                  background: statusColor,
-                  boxShadow: isFullHealth ? `0 0 6px ${statusColor}` : 'none',
-                }}
+                style={{ background: statusColor, boxShadow: isFullHealth ? `0 0 5px ${statusColor}` : 'none' }}
               />
-              <span className="psb-badge-label" style={{ color: statusColor }}>
-                {statusLabel}
-              </span>
+              <span className="psb-badge-label" style={{ color: statusColor }}>{statusLabel}</span>
             </div>
-          )}
+            <div className="psb-pool-label">{poolSize} credentials in pool</div>
+          </div>
         </div>
 
-        {/* ── Centre: segmented health bar ── */}
-        <div className="psb-center">
-          <div className="psb-bar-header">
-            <span className="psb-bar-label">Pool Health</span>
-            <span className="psb-bar-pct" style={{ color: statusColor }}>
-              {Math.round(healthPct)}%
+        {/* ── Divider ── */}
+        <div className="psb-vdivider" />
+
+        {/* ── Counts ── */}
+        <div className="psb-counts">
+          <div className="psb-count-block">
+            <span className="psb-count-val" style={{ color: statusColor }}>{healthyCount}</span>
+            <span className="psb-count-label">Healthy</span>
+          </div>
+          <div className="psb-count-sep" />
+          <div className="psb-count-block">
+            <span
+              className="psb-count-val"
+              style={{ color: unhealthy > 0 ? '#f87171' : 'rgba(255,255,255,0.16)' }}
+            >
+              {unhealthy}
             </span>
+            <span className="psb-count-label">Unhealthy</span>
+          </div>
+        </div>
+
+        {/* ── Divider ── */}
+        <div className="psb-vdivider" />
+
+        {/* ── Segmented bar ── */}
+        <div className="psb-seg-block">
+          <div className="psb-seg-header">
+            <span className="psb-seg-title">Pool Health</span>
           </div>
           {segments.length > 0 ? (
             <div className="psb-segments">
               {segments.map((healthy, i) => (
-                <div
+                <motion.div
                   key={i}
                   className="psb-seg"
                   title={`Credential ${i} — ${healthy ? 'healthy' : 'unhealthy'}`}
+                  initial={{ scaleX: 0, transformOrigin: 'left' }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: 0.35, delay: i * 0.04, ease: 'easeOut' }}
                   style={{
                     background: healthy
-                      ? `linear-gradient(90deg, ${statusColor}cc, ${statusColor}88)`
+                      ? `linear-gradient(90deg, ${statusColor}d0, ${statusColor}78)`
                       : 'rgba(255,255,255,0.07)',
-                    boxShadow: healthy && isFullHealth ? `0 0 8px ${statusColor}44` : 'none',
+                    boxShadow: healthy && isFullHealth ? `0 0 7px ${statusColor}44` : 'none',
                   }}
                 />
               ))}
@@ -149,33 +173,32 @@ export function PoolSummaryBar({ poolSize, healthyCount, onValidated, onReset }:
           )}
         </div>
 
-        {/* ── Right: action buttons ── */}
+        {/* ── Actions ── */}
         <div className="psb-actions">
           <button
             onClick={handleValidate}
-            disabled={validating}
-            className={`psb-btn-ghost${validating ? ' psb-btn--disabled' : ''}`}
+            disabled={validating || poolSize === 0}
+            className="psb-btn-ghost"
+            title="Validate all credentials against the API"
           >
-            <ShieldCheck size={12} style={{ flexShrink: 0 }} />
+            <ShieldCheck size={13} style={{ flexShrink: 0 }} />
             {validating ? 'Validating…' : 'Validate'}
           </button>
           <button
             onClick={handleReset}
-            disabled={resetting}
-            className={`psb-btn-primary${resetting ? ' psb-btn--disabled' : ''}`}
+            disabled={resetting || poolSize === 0}
+            className="psb-btn-primary"
+            title="Reset all credentials to healthy state"
           >
             <RefreshCw
-              size={12}
-              style={{
-                flexShrink: 0,
-                animation: resetting ? 'sb-spin 0.8s linear infinite' : 'none',
-              }}
+              size={13}
+              style={{ flexShrink: 0, animation: resetting ? 'psb-spin 0.8s linear infinite' : 'none' }}
             />
             {resetting ? 'Resetting…' : 'Reset All'}
           </button>
         </div>
-      </div>
 
+      </div>
       <style>{PSB_CSS}</style>
     </div>
   )
@@ -183,20 +206,20 @@ export function PoolSummaryBar({ poolSize, healthyCount, onValidated, onReset }:
 
 const PSB_CSS = `
   .psb-root {
-    background: rgba(255,255,255,0.02);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.018);
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 18px;
     padding: 20px 24px;
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
   }
 
-  .psb-sheen {
+  .psb-shimmer {
     position: absolute;
     top: 0;
-    left: 10%;
-    right: 10%;
+    left: 8%;
+    right: 8%;
     height: 1px;
     pointer-events: none;
   }
@@ -204,73 +227,63 @@ const PSB_CSS = `
   .psb-inner {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 22px;
   }
 
-  /* ── Left ── */
-  .psb-left {
+  /* ── Ring block ── */
+  .psb-ring-block {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     flex-shrink: 0;
   }
 
-  .psb-orb {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+  .psb-ring-wrap {
+    position: relative;
+    width: 56px;
+    height: 56px;
     flex-shrink: 0;
+  }
+
+  .psb-ring-center {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .psb-counts {
-    display: flex;
-    gap: 20px;
-  }
-
-  .psb-count-val {
+  .psb-ring-pct {
     font-family: var(--mono);
-    font-size: 28px;
+    font-size: 11px;
     font-weight: 700;
-    line-height: 1;
-    letter-spacing: -0.8px;
+    letter-spacing: -0.3px;
   }
 
-  .psb-count-label {
-    font-size: 8.5px;
-    color: rgba(255,255,255,0.28);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-top: 4px;
-    font-family: var(--mono);
+  .psb-ring-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
   }
 
-  .psb-divider {
-    width: 1px;
-    height: 36px;
-    background: rgba(255,255,255,0.07);
-    align-self: center;
-  }
-
-  .psb-badge {
+  .psb-status-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 12px;
+    padding: 4px 10px;
     border-radius: 999px;
+    align-self: flex-start;
   }
 
   .psb-badge-dot {
     width: 5px;
     height: 5px;
     border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .psb-badge-dot--pulse {
-    animation: sb-pulse 2.5s ease-in-out infinite;
+    animation: psb-pulse 2.6s ease-in-out infinite;
   }
 
   .psb-badge-label {
@@ -280,48 +293,95 @@ const PSB_CSS = `
     letter-spacing: 0.12em;
   }
 
-  /* ── Center ── */
-  .psb-center {
-    flex: 1;
-    min-width: 0;
+  .psb-pool-label {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    color: rgba(255,255,255,0.24);
   }
 
-  .psb-bar-header {
+  /* ── Vertical divider ── */
+  .psb-vdivider {
+    width: 1px;
+    height: 44px;
+    background: rgba(255,255,255,0.07);
+    flex-shrink: 0;
+  }
+
+  /* ── Counts ── */
+  .psb-counts {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
     align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
   }
 
-  .psb-bar-label {
-    font-size: 9px;
-    color: rgba(255,255,255,0.25);
+  .psb-count-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .psb-count-val {
+    font-family: var(--mono);
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -1px;
+  }
+
+  .psb-count-label {
+    font-size: 8.5px;
+    color: rgba(255,255,255,0.26);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     font-family: var(--mono);
   }
 
-  .psb-bar-pct {
+  .psb-count-sep {
+    width: 1px;
+    height: 32px;
+    background: rgba(255,255,255,0.07);
+    align-self: center;
+  }
+
+  /* ── Segment bar ── */
+  .psb-seg-block {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .psb-seg-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    align-items: center;
+  }
+
+  .psb-seg-title {
+    font-size: 9px;
+    color: rgba(255,255,255,0.24);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
     font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 700;
   }
 
   .psb-segments {
     display: flex;
-    gap: 4px;
+    gap: 5px;
   }
 
   .psb-seg {
     flex: 1;
-    height: 10px;
+    height: 11px;
     border-radius: 5px;
     transition: background 0.4s, box-shadow 0.4s;
+    cursor: default;
   }
 
   .psb-seg-empty {
-    height: 10px;
+    height: 11px;
     border-radius: 5px;
     background: rgba(255,255,255,0.05);
   }
@@ -329,7 +389,7 @@ const PSB_CSS = `
   /* ── Actions ── */
   .psb-actions {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
     flex-shrink: 0;
   }
@@ -337,54 +397,63 @@ const PSB_CSS = `
   .psb-btn-ghost {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     padding: 8px 16px;
     border-radius: 9px;
     font-size: 12px;
     font-weight: 600;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.7);
+    color: rgba(255,255,255,0.65);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background 0.15s, border-color 0.15s;
     font-family: var(--mono);
+    white-space: nowrap;
   }
 
   .psb-btn-ghost:hover:not(:disabled) {
     background: rgba(255,255,255,0.09);
+    border-color: rgba(255,255,255,0.16);
+  }
+
+  .psb-btn-ghost:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
   }
 
   .psb-btn-primary {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     padding: 8px 16px;
     border-radius: 9px;
     font-size: 12px;
     font-weight: 600;
     background: rgba(0,229,160,0.1);
-    border: 1px solid rgba(0,229,160,0.25);
+    border: 1px solid rgba(0,229,160,0.24);
     color: #00e5a0;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background 0.15s, border-color 0.15s;
     font-family: var(--mono);
+    white-space: nowrap;
   }
 
   .psb-btn-primary:hover:not(:disabled) {
     background: rgba(0,229,160,0.16);
+    border-color: rgba(0,229,160,0.32);
   }
 
-  .psb-btn--disabled {
-    opacity: 0.45;
+  .psb-btn-primary:disabled {
+    opacity: 0.38;
     cursor: not-allowed;
   }
 
-  @keyframes sb-pulse {
+  @keyframes psb-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
   }
 
-  @keyframes sb-spin {
+  @keyframes psb-spin {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
   }
