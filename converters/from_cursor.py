@@ -1,9 +1,18 @@
 """
-Shin Proxy — Convert Cursor SSE output to OpenAI / Anthropic response shapes.
+Shin Proxy — from_cursor shim + cross-cutting text processors.
 
-Includes chunk formatters, reasoning tag extraction, and text sanitization.
+This file re-exports simple chunk formatters from the focused sub-modules and
+directly owns all functions that tests patch via `converters.from_cursor.*`:
+  - context_window_for (patched by zero-ctx tests)
+  - litellm            (patched by tool-call conversion tests)
+  - openai_non_streaming_response, openai_usage_chunk
+  - anthropic_message_start, anthropic_non_streaming_response
+  - convert_tool_calls_to_anthropic
+  - sanitize_visible_text, split_visible_reasoning, scrub_support_preamble
+
+All cross-cutting text processing utilities also live here because they are
+consumed by both OpenAI and Anthropic pipeline paths.
 """
-
 from __future__ import annotations
 
 import copy
@@ -27,9 +36,10 @@ def _safe_pct(used: int, ctx: int) -> float:
     """Return usage percentage rounded to 2dp, guarding against zero context window."""
     return round(used / ctx * 100, 2) if ctx else 0.0
 
+
 log = structlog.get_logger()
 
-# ── Compiled patterns ───────────────────────────────────────────────────────
+# ── Compiled patterns ────────────────────────────────────────────────────────
 
 _JSON_FENCE_RE = re.compile(
     r"```(?:json)?\s*([\s\S]*?)\s*```", flags=re.IGNORECASE
@@ -59,39 +69,7 @@ def now_ts() -> int:
     return int(time.time())
 
 
-# ── OpenAI response formatters ──────────────────────────────────────────────
-
-def openai_chunk(
-    chunk_id: str,
-    model: str,
-    delta: dict | None = None,
-    finish_reason: str | None = None,
-    created: int | None = None,
-) -> dict:
-    """Build an OpenAI chat.completion.chunk dict."""
-    return {
-        "id": chunk_id,
-        "object": "chat.completion.chunk",
-        "created": created if created is not None else now_ts(),
-        "model": model,
-        "choices": [
-            {
-                "index": 0,
-                "delta": delta or {},
-                "finish_reason": finish_reason,
-            }
-        ],
-    }
-
-
-def openai_sse(payload: dict) -> str:
-    """Format a dict as an SSE data line."""
-    return f"data: {json.dumps(payload)}\n\n"
-
-
-def openai_done() -> str:
-    return "data: [DONE]\n\n"
-
+# ── OpenAI non-streaming + usage chunk (own these so patch targets work) ─────
 
 def openai_non_streaming_response(
     chunk_id: str,
@@ -129,13 +107,6 @@ def openai_non_streaming_response(
     return resp
 
 
-# ── Anthropic response formatters ──────────────────────────────────────────
-
-def anthropic_sse_event(event_type: str, data: dict) -> str:
-    """Format an Anthropic SSE event."""
-    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-
-
 def openai_usage_chunk(chunk_id: str, model: str, input_tokens: int, output_tokens: int) -> str:
     """Emit a final SSE chunk carrying usage (sent after finish_reason chunk)."""
     ctx = context_window_for(model)
@@ -155,6 +126,8 @@ def openai_usage_chunk(chunk_id: str, model: str, input_tokens: int, output_toke
     }
     return openai_sse(payload)
 
+
+# ── Anthropic non-streaming + message_start (own for patch compatibility) ─────
 
 def anthropic_message_start(msg_id: str, model: str, input_tokens: int = 0) -> str:
     ctx = context_window_for(model)
@@ -177,44 +150,6 @@ def anthropic_message_start(msg_id: str, model: str, input_tokens: int = 0) -> s
         },
     }
     return anthropic_sse_event("message_start", start)
-
-
-def anthropic_content_block_start(index: int, block: dict) -> str:
-    return anthropic_sse_event(
-        "content_block_start",
-        {"type": "content_block_start", "index": index, "content_block": block},
-    )
-
-
-def anthropic_content_block_delta(index: int, delta: dict) -> str:
-    return anthropic_sse_event(
-        "content_block_delta",
-        {"type": "content_block_delta", "index": index, "delta": delta},
-    )
-
-
-def anthropic_content_block_stop(index: int) -> str:
-    return anthropic_sse_event(
-        "content_block_stop",
-        {"type": "content_block_stop", "index": index},
-    )
-
-
-def anthropic_message_delta(stop_reason: str, output_tokens: int = 0) -> str:
-    return anthropic_sse_event(
-        "message_delta",
-        {
-            "type": "message_delta",
-            "delta": {"stop_reason": stop_reason, "stop_sequence": None},
-            "usage": {"output_tokens": output_tokens},
-        },
-    )
-
-
-def anthropic_message_stop() -> str:
-    return anthropic_sse_event(
-        "message_stop", {"type": "message_stop"}
-    )
 
 
 def anthropic_non_streaming_response(
@@ -242,6 +177,8 @@ def anthropic_non_streaming_response(
         },
     }
 
+
+# ── Tool call conversion (own for litellm patch compatibility) ─────────────────
 
 def _parse_tool_call_arguments(arguments: object) -> object:
     if isinstance(arguments, str):
@@ -318,7 +255,7 @@ def convert_tool_calls_to_anthropic(tool_calls: list[dict]) -> list[dict]:
         return _manual_convert_tool_calls_to_anthropic(tool_calls)
 
 
-# ── Reasoning extraction ───────────────────────────────────────────────────
+# ── Reasoning extraction ──────────────────────────────────────────────────────
 
 def split_visible_reasoning(text: str) -> tuple[str | None, str]:
     """Extract <thinking>...</thinking> content from response text.
@@ -352,7 +289,7 @@ def split_visible_reasoning(text: str) -> tuple[str | None, str]:
     return thinking, final
 
 
-# ── Support preamble scrubber ──────────────────────────────────────────────
+# ── Support preamble scrubber ─────────────────────────────────────────────────
 
 _SUPPORT_PREAMBLE_RE = re.compile(
     r"(as a (?:the-editor )?support assistant[^.]*\.?\s*)"
@@ -379,7 +316,7 @@ def scrub_support_preamble(text: str) -> tuple[str, bool]:
     return cleaned, count > 0
 
 
-# ── Text sanitization ──────────────────────────────────────────────────────
+# ── Text sanitization ─────────────────────────────────────────────────────────
 
 def _looks_like_raw_tool_payload(text: str) -> bool:
     """Return True only when text contains a real [assistant_tool_calls] marker.
@@ -424,3 +361,20 @@ def sanitize_visible_text(
         return without_fences, True
 
     return "", True
+
+
+# ── Simple chunk formatters (re-exported from focused sub-modules) ─────────────
+from converters.from_cursor_openai import (  # noqa: F401, E402
+    openai_chunk,
+    openai_sse,
+    openai_done,
+)
+
+from converters.from_cursor_anthropic import (  # noqa: F401, E402
+    anthropic_sse_event,
+    anthropic_content_block_start,
+    anthropic_content_block_delta,
+    anthropic_content_block_stop,
+    anthropic_message_delta,
+    anthropic_message_stop,
+)
