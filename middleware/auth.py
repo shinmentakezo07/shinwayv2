@@ -175,11 +175,16 @@ async def check_budget(api_key: str, key_record: object = _NO_RECORD) -> None:
         if total_spend >= settings.budget_usd:
             raise RateLimitError("Global budget limit reached. Contact the administrator.")
 
-    # Per-key daily token limit (in-process counter, resets on restart)
+    # Per-key daily token limit — SQLite sliding window when quota enabled,
+    # else falls back to in-process analytics counter (resets on restart).
     if rec and rec.get("token_limit_daily", 0) > 0:
-        daily_tokens = await analytics.get_daily_tokens(api_key)
-        if daily_tokens >= rec["token_limit_daily"]:
-            raise RateLimitError("Daily token limit reached. Contact the administrator.")
+        if settings.quota_enabled:
+            from middleware.quota import check_quota
+            await check_quota(api_key, rec["token_limit_daily"])
+        else:
+            daily_tokens = await analytics.get_daily_tokens(api_key)
+            if daily_tokens >= rec["token_limit_daily"]:
+                raise RateLimitError("Daily token limit reached. Contact the administrator.")
 
 
 def enforce_allowed_models(key_record: dict | None, model: str) -> None:
