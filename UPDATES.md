@@ -4519,3 +4519,36 @@ When the primary model is rate-limited or returns persistent backend errors acro
 | 0e298ae1 | feat(pipeline): add fallback_model field to PipelineParams |
 | bf857566 | feat(pipeline): wire FallbackChain into _call_with_retry for model fallback |
 | c978717c | refactor(pipeline): re-export FallbackChain from pipeline package |
+
+## Session 78 — Batch API (2026-03-25)
+
+### What changed
+- `storage/batch.py` CREATED — `BatchStore` with `init`, `close`, `create`, `get`, `update_status`, `save_results`, `get_results`, `get_requests`, `list_by_key`. SQLite WAL mode, api_key-scoped reads. Module-level `batch_store` singleton.
+- `routers/batch.py` CREATED — `create_batch`, `get_batch`, `get_batch_results`, `cancel_batch` endpoints + `_process_batch` background task.
+- `app.py` MODIFIED — lifespan: `batch_store.init()` after `key_store.init()`, `batch_store.close()` in finally block; router: `app.include_router(batch_router)`.
+- `tests/test_batch.py` CREATED — 22 unit tests (TDD red-then-green). 11 BatchStore CRUD tests + 11 router tests.
+
+### Which lines / functions
+- `storage/batch.py:BatchStore.create` — inserts with status=validating, returns OpenAI Batch API shape dict directly
+- `storage/batch.py:BatchStore.get` — SELECT * WHERE id=? AND api_key=? (cross-tenant isolation)
+- `storage/batch.py:BatchStore.update_status` — sets cancelled_at for cancelled, completed_at for completed/failed
+- `storage/batch.py:BatchStore.save_results` — stores results_json + completed_count/failed_count; does NOT touch status
+- `storage/batch.py:BatchStore.get_results` — returns None when results_json IS NULL (not-yet-completed)
+- `storage/batch.py:BatchStore.list_by_key` — SELECT * WHERE api_key=? ORDER BY created_at DESC
+- `storage/batch.py:_to_record` — converts aiosqlite.Row to OpenAI Batch response shape
+- `routers/batch.py:_process_batch` — background task; checks cancellation before each item; per-item try/except; final_status=completed if any succeeded else failed
+- `routers/batch.py:create_batch` — POST /v1/batch; validates requests non-empty + custom_id uniqueness; enqueues _process_batch via BackgroundTasks
+- `routers/batch.py:get_batch` — GET /v1/batch/{batch_id}; 404 on missing/wrong-key
+- `routers/batch.py:get_batch_results` — GET /v1/batch/{batch_id}/results; 400 when not terminal; returns NDJSON (response_model=None)
+- `routers/batch.py:cancel_batch` — POST /v1/batch/{batch_id}/cancel; 422 if not in cancellable status
+- `app.py:_lifespan` — batch_store init/close wired between key_store and quota_store
+- `app.py:create_app` — batch_router included after responses_router
+
+### Why
+OpenAI Batch API support for fire-and-forget agentic workflows that submit multiple completions without holding connections open. Background task processes items sequentially via `handle_openai_non_streaming`; per-item failures do not abort the batch.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| 207375cd | feat(batch): add OpenAI-compatible Batch API |
+| 0d734ffa | feat(app): register batch_router and init/close batch_store in lifespan |
