@@ -15,11 +15,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app import get_http_client
 from config import settings
-from converters.from_cursor import now_ts
-from converters.to_cursor import (
+from converters.from_cursor_openai import now_ts
+from converters.to_cursor_openai import openai_to_cursor
+from converters.to_cursor_anthropic import (
     anthropic_messages_to_openai,
-    anthropic_to_cursor,
-    openai_to_cursor,
+    anthropic_to_the_editor as anthropic_to_cursor,
     parse_system,
 )
 from cursor.client import CursorClient
@@ -289,6 +289,8 @@ async def anthropic_messages(
     _raw_max_tokens = payload.get("max_tokens")
     max_tokens: int | None = int(_raw_max_tokens) if _raw_max_tokens is not None else None
     stop_sequences: list[str] = payload.get("stop_sequences") or []
+    _anth_rf = payload.get("response_format")
+    json_mode = isinstance(_anth_rf, dict) and _anth_rf.get("type") in ("json_object", "json_schema")
     if stop_sequences:
         log.info("stop_sequences_requested", count=len(stop_sequences), model=model)
     thinking_budget = (
@@ -319,6 +321,7 @@ async def anthropic_messages(
         tool_choice=tool_choice,
         thinking=thinking,
         model=model,
+        parallel_tool_calls=parallel_tool_calls,
     )
 
     ctx_result = context_engine.check_preflight(messages, tools, model, cursor_messages)
@@ -335,6 +338,7 @@ async def anthropic_messages(
         show_reasoning=show_reasoning,
         reasoning_effort="medium" if show_reasoning else None,
         parallel_tool_calls=parallel_tool_calls,
+        json_mode=json_mode,
         api_key=api_key,
         system_text=system_text,
         max_tokens=max_tokens,
