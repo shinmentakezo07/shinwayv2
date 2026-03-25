@@ -7,7 +7,6 @@ and lifespan hooks (httpx client init/teardown).
 
 from __future__ import annotations
 
-import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -196,25 +195,12 @@ def create_app() -> FastAPI:
                     pass
             return await call_next(request)
 
-    # ── Middleware: inject request_id + structured HTTP logging ─────────
+    # ── Middleware: RequestContext + structured lifecycle logging ────────
+    from middleware.logging import request_context_middleware
 
     @app.middleware("http")
-    async def request_id_middleware(request: Request, call_next):
-        import time as _time
-        request.state.request_id = uuid.uuid4().hex[:16]
-        start = _time.monotonic()
-        response = await call_next(request)
-        latency_ms = round((_time.monotonic() - start) * 1000, 1)
-        response.headers["X-Request-ID"] = request.state.request_id
-        log.info(
-            "http_request",
-            method=request.method,
-            path=request.url.path,
-            status=response.status_code,
-            latency_ms=latency_ms,
-            request_id=request.state.request_id,
-        )
-        return response
+    async def _request_context(request: Request, call_next):
+        return await request_context_middleware(request, call_next)
 
     # ── Register routers ────────────────────────────────────────────────
     from routers.internal import router as internal_router
