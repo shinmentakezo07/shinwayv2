@@ -80,3 +80,17 @@ def test_param_aliases_not_empty():
     assert isinstance(_PARAM_ALIASES, dict)
     assert len(_PARAM_ALIASES) > 10
     assert "cmd" in _PARAM_ALIASES
+
+
+def test_param_aliases_maps_to_canonical():
+    assert _PARAM_ALIASES["cmd"] == "command"
+    assert _PARAM_ALIASES["filepath"] == "file_path"
+    assert _PARAM_ALIASES["body"] == "content"
+    assert _PARAM_ALIASES["glob"] == "pattern"
+
+
+def test_coerce_object_from_json_string():
+    repairs: list[str] = []
+    result = _coerce_value('{"key": "val"}', {"type": "object"}, "opts", repairs)
+    assert result == {"key": "val"}
+    assert repairs

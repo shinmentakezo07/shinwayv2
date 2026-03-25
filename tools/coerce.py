@@ -8,9 +8,6 @@ from __future__ import annotations
 import re
 
 import msgspec.json as msgjson
-import structlog
-
-log = structlog.get_logger()
 
 
 # ── Common param aliases the model tends to use wrong ───────────────────────
