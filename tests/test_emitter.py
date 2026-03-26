@@ -77,3 +77,15 @@ def test_openai_tool_emitter_dedup_same_signature():
 def test_openai_tool_emitter_empty_list():
     emitter = OpenAIToolEmitter(chunk_id="cid", model="claude", created=0)
     assert emitter.emit([]) == []
+
+
+def test_parse_tool_arguments_logs_on_failure():
+    """parse_tool_arguments warns when JSON is invalid instead of silently returning {}."""
+    import structlog.testing
+    with structlog.testing.capture_logs() as cap:
+        result = parse_tool_arguments("not{json")
+    assert result == {}
+    assert any(
+        "parse" in str(entry).lower() or "arguments" in str(entry).lower()
+        for entry in cap
+    )

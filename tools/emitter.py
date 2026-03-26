@@ -10,6 +10,9 @@ converters/from_cursor.py never imports from tools/emitter.
 from __future__ import annotations
 
 import msgspec.json as msgjson
+import structlog
+
+log = structlog.get_logger()
 
 from converters.from_cursor import (
     anthropic_content_block_delta,
@@ -44,7 +47,12 @@ def parse_tool_arguments(raw_args: str | dict) -> dict:
         if isinstance(result, str):
             result = msgjson.decode(result.encode())
         return result if isinstance(result, dict) else {}
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "emitter_args_parse_failed",
+            error=str(exc),
+            raw_len=len(raw_args) if isinstance(raw_args, str) else 0,
+        )
         return {}
 
 
