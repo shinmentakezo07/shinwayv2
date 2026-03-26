@@ -4805,3 +4805,42 @@ Phase 3 Chunk 5: `_sanitize_user_content` is a standalone sanitization concern w
 |-----|-------------|
 | `3f3f8eed` | feat(tools): add sanitize.py — _sanitize_user_content, _CURSOR_WORD_RE (copy; cursor_helpers intact) |
 | `2eaa183f` | refactor(converters): cursor_helpers re-exports _sanitize_user_content from tools/sanitize |
+
+---
+
+## Session 146 — tools/ Phase 3: metrics, registry, emitter, budget (2026-03-26)
+
+### What changed
+
+**New files:**
+- `tools/metrics.py` — stable metrics wrapper; `inc_parse_outcome`, `inc_tool_repair`, `inc_schema_validation`. Replaces scattered try/except ImportError in `tools/parse.py`.
+- `tests/test_metrics.py` — 4 tests
+- `tests/test_sanitize.py` — 8 tests (for Phase 3 Chunk 5)
+- `tests/test_results.py` — 5 tests (for Phase 3 Chunk 6)
+
+**Modified files:**
+- `tools/parse.py` — replaced 5-line try/except ImportError block with `from tools.metrics import inc_parse_outcome`
+- `tools/registry.py` — added `import structlog`; added collision warning before `_ae[norm] = name` in `__init__` loop
+- `tools/emitter.py` — added `import structlog`; `parse_tool_arguments` now logs `emitter_args_parse_failed` warning on JSON failure instead of silently returning `{}`
+- `tools/budget.py` — added `deduplicate_tool_calls(calls)` function
+- `tests/test_registry.py` — added `test_collision_warning_emitted` using `structlog.testing.capture_logs()`
+- `tests/test_emitter.py` — added `test_parse_tool_arguments_logs_on_failure` using `structlog.testing.capture_logs()`
+- `tests/test_budget.py` — added 5 deduplication tests
+
+### Which lines / functions
+- `tools/metrics.py:inc_parse_outcome` — wraps optional `metrics.parse_metrics` backend; no-op when absent
+- `tools/metrics.py:inc_tool_repair`, `inc_schema_validation` — no-op stubs giving repair/validation paths a stable import point
+- `tools/registry.py:ToolRegistry.__init__` — collision check: `if norm in _ae and _ae[norm] != name: log.warning("tool_name_normalization_collision", ...)`
+- `tools/emitter.py:parse_tool_arguments` — `except Exception as exc: log.warning("emitter_args_parse_failed", error=str(exc), raw_len=...)`
+- `tools/budget.py:deduplicate_tool_calls` — deduplicates by `(name, arguments)` string signature; preserves first occurrence
+
+### Why
+Phase 3 reliability and observability: silent failures made invisible, missing metrics stubs added, consistency between registry and no-registry collision warning behavior established.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `b3d773ab` | feat(tools): add metrics.py — stable instrumentation wrapper; update parse.py |
+| `e14bc025` | fix(tools): emitter.py logs parse_tool_arguments failures |
+| `80cc5cf9` | fix(tools): registry.py emits tool_name_normalization_collision warning |
+| `cdc47345` | feat(tools): add deduplicate_tool_calls to budget.py |
