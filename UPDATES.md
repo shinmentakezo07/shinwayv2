@@ -4600,3 +4600,22 @@ Chunk 2 of the tools/ refactor plan (`docs/superpowers/plans/2026-03-25-tools-re
 | SHA | Description |
 |-----|-------------|
 | `2e59718c` | feat(tools): extract score.py — score_tool_call_confidence, _find_marker_pos |
+
+---
+
+## Session 139 — tools/format.py canonical wire-format encoder (2026-03-26)
+
+### What changed
+- `tools/format.py` — created
+- `tests/test_format.py` — created
+
+### Which lines / functions
+- `tools/format.py:encode_tool_calls` — encodes a list of OpenAI-format tool call dicts to the `[assistant_tool_calls]\n{"tool_calls":[...]}` wire format; arguments decoded from JSON string to dict before serialisation
+
+### Why
+Chunk 6 of the tools/ refactor plan. Provides a single authoritative encoder for the wire format emitted between the proxy and the-editor's /api/chat endpoint. Previously duplicated inline across pipeline and converter modules. `converters/cursor_helpers.py` will re-export `encode_tool_calls` as `_assistant_tool_call_text` for backward compat.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `7b4faa23` | feat(tools): add format.py — encode_tool_calls canonical wire-format encoder |
