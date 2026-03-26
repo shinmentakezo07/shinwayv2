@@ -613,8 +613,8 @@ Read the full file, locate:
 - `_compute_tool_signature` function
 - `_parse_tool_arguments` function
 - `_serialize_tool_arguments` function
-- `_stream_anthropic_tool_input` function
-- `_OpenAIToolEmitter` class
+- `_stream_anthropic_tool_input` function — **note:** its body calls `_serialize_tool_arguments(raw_args)`. In the new `tools/emitter.py`, both functions exist at module level with public names, so the internal call must be `serialize_tool_arguments(raw_args)` (no leading underscore). The provided snippet already uses the public name — just confirm it when copying.
+- `_OpenAIToolEmitter` class — **note:** its `emit()` method calls `_compute_tool_signature(fn)`. In `tools/emitter.py` this becomes `compute_tool_signature(fn)` (no leading underscore). The provided snippet already uses the public name — confirm when copying.
 
 - [ ] **Step 2: Write `tools/emitter.py`** with public names (no leading underscore)
 
@@ -884,10 +884,12 @@ def test_registry_with_no_tools_returns_none():
     result = parse_tool_calls_from_text(text, [], registry=reg)
     assert result is None
 
-def test_registry_fuzzy_name_resolves():
+def test_registry_normalized_name_resolves():
+    # ToolRegistry normalizes "bash" → "bash" (lowercase) → canonical "Bash".
+    # This is normalized-exact lookup (not Levenshtein fuzzy), but the net result
+    # is case-insensitive name matching, which is the important invariant.
     tools = [_tool("Bash")]
     reg = ToolRegistry(tools)
-    # "bash" (lowercase) should fuzzy-match "Bash"
     text = '[assistant_tool_calls]\n{"tool_calls": [{"name": "bash", "arguments": {"command": "ls"}}]}'
     result = parse_tool_calls_from_text(text, tools, registry=reg)
     assert result is not None
@@ -945,17 +947,20 @@ Expected: failures on `StreamingToolCallParser(tools, registry=reg)` — unexpec
 grep -n 'def parse_tool_calls_from_text\|allowed_exact\|schema_map\|_CURSOR_BACKEND' /teamspace/studios/this_studio/dikders/tools/parse.py | head -20
 ```
 
-- [ ] **Step 2: Update the function signature and add the registry fast-path**
+- [ ] **Step 2: Add `TYPE_CHECKING` import to `tools/parse.py`**
 
-Change the function signature from:
+`from __future__ import annotations` is already at line 1 of `tools/parse.py`. Add below it:
+
 ```python
-def parse_tool_calls_from_text(
-    text: str,
-    tools: list[dict] | None,
-    streaming: bool = False,
-) -> list[dict] | None:
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from tools.registry import ToolRegistry
 ```
-To:
+
+- [ ] **Step 3: Update the function signature**
+
+Find `def parse_tool_calls_from_text(` and add the `registry` param:
+
 ```python
 def parse_tool_calls_from_text(
     text: str,
@@ -965,33 +970,29 @@ def parse_tool_calls_from_text(
 ) -> list[dict] | None:
 ```
 
-Note: use a string annotation `"ToolRegistry | None"` to avoid a circular import at module load time (ToolRegistry is in `tools.registry` which imports from `tools.coerce`; `tools.parse` already imports from `tools.coerce` — no cycle, but using `TYPE_CHECKING` guard is cleaner).
+- [ ] **Step 4: Add the registry fast-path inside `parse_tool_calls_from_text`**
 
-Actually: add `from __future__ import annotations` is already at the top of parse.py. Import `ToolRegistry` under `TYPE_CHECKING`:
-
-```python
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from tools.registry import ToolRegistry
-```
-
-Then find the block that builds `allowed_exact` and `schema_map` (it starts with `allowed_exact: dict[str, str] = {}` and loops over `tools`). Wrap it with the registry fast-path:
+Find the block that builds `allowed_exact` (starts with `allowed_exact: dict[str, str] = {}` and contains a `for t in tools:` loop with a collision warning). Wrap it with the registry guard:
 
 ```python
     if registry is not None:
         allowed_exact = registry.allowed_exact()
         schema_map = registry.schema_map()
+        # NOTE: ToolRegistry.__init__ silently overwrites on tool name collision.
+        # The no-registry path emits a tool_name_normalization_collision warning.
+        # When registry is provided, that warning is skipped — accepted trade-off
+        # for the performance benefit. ToolRegistry is built once per request and
+        # collisions are extremely rare in practice.
     else:
-        # existing rebuild logic — unchanged
+        # existing rebuild logic — unchanged (keep verbatim, including collision warning)
         allowed_exact: dict[str, str] = {}
         for t in tools:
-            ...
-        # ... rest of existing build logic including _CURSOR_BACKEND_TOOLS ...
+            ...  # keep all existing lines here — do NOT change them
         schema_map: dict[str, set[str]] = {}
         ...
 ```
+
+The `else` branch must contain the **entire** existing rebuild block verbatim — do not simplify or remove the collision-warning loop.
 
 - [ ] **Step 3: Run registry wiring tests**
 
@@ -1008,23 +1009,27 @@ pytest tests/test_registry_wiring.py::test_with_registry_returns_same_result_as_
 
 - [ ] **Step 2: Update `__init__` to accept and store `registry`**
 
-Change:
-```python
-def __init__(self, tools: list[dict]) -> None:
-    from tools.parse import parse_tool_calls_from_text as _ptcft
-    self._parse = _ptcft
-    self._tools = tools
-    ...
-```
-To:
+Change the **full** `__init__` body (must include all state initialization lines):
+
 ```python
 def __init__(self, tools: list[dict], registry: "ToolRegistry | None" = None) -> None:
     from tools.parse import parse_tool_calls_from_text as _ptcft
     self._parse = _ptcft
     self._tools = tools
     self._registry = registry
-    ...
+    self.buf = ""
+    self._scan_pos = 0
+    self._marker_confirmed = False
+    self._marker_pos: int = -1
+    self._json_start: int = -1
+    self._depth: int = 0
+    self._in_str: bool = False
+    self._esc: bool = False
+    self._json_complete: bool = False
+    self._last_result: list[dict] | None = None
 ```
+
+The only change from the current body is: add `registry: "ToolRegistry | None" = None` to the signature, and add `self._registry = registry` after `self._tools = tools`. All other lines are copied verbatim from the existing `tools/streaming.py:StreamingToolCallParser.__init__`.
 
 Add `TYPE_CHECKING` guard at top of `tools/streaming.py`:
 ```python
@@ -1159,7 +1164,22 @@ git commit -m "feat(tools): wire ToolRegistry into parse_tool_calls_from_text an
 
 - [ ] **Step 1: Read the full `pipeline/tools.py`**
 
-Confirm re-export aliases from chunks 2 and 3 are in place before deleting bodies.
+Confirm re-export aliases from chunks 2 and 3 are in place.
+
+- [ ] **Step 1b: Pre-deletion smoke test — confirm all aliases are live BEFORE removing any bodies**
+
+```bash
+python -c "
+from pipeline.tools import _limit_tool_calls, _repair_invalid_calls
+from pipeline.tools import _compute_tool_signature, _parse_tool_arguments
+from pipeline.tools import _serialize_tool_arguments, _stream_anthropic_tool_input
+from pipeline.tools import _OpenAIToolEmitter
+from pipeline.tools import _parse_score_repair
+print('All 8 names importable from pipeline.tools — safe to remove bodies')
+"
+```
+
+If this fails: stop. The missing alias must be added before proceeding. Do NOT delete bodies until all 8 names resolve.
 
 - [ ] **Step 2: Remove moved function bodies**
 
@@ -1276,10 +1296,11 @@ Expected: all existing tests pass + 4 new test files pass. 5 pre-existing failur
 ```bash
 pytest tests/test_validate.py tests/test_budget.py tests/test_emitter.py tests/test_registry_wiring.py \
     --cov=tools.validate --cov=tools.budget --cov=tools.emitter \
-    --cov-report=term-missing -q 2>&1 | tail -15
+    --cov=tools.parse --cov=tools.streaming \
+    --cov-report=term-missing -q 2>&1 | tail -20
 ```
 
-Expected: ≥ 80% coverage on each new module.
+Expected: ≥ 80% coverage on each new module (`validate`, `budget`, `emitter`). `parse` and `streaming` are modified — verify the registry code paths are covered.
 
 ### Task 15: Update UPDATES.md and push
 
