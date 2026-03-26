@@ -5030,3 +5030,26 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | SHA | Description |
 |---|---|
 | `0fdd6f86` | feat(routers): 10 enhancements |
+
+## Session 153 — Full test suite clean: 1057 passing, 0 failures (2026-03-26)
+
+### What changed
+- `tests/conftest.py` — pin `LITELLM_MASTER_KEY` at session level via `os.environ`; autouse `_reset_auth_cache` clears LRU after each test
+- `tests/test_fallback.py` — replace `importlib.reload` with direct `Settings()` instantiation; reload was breaking singleton references across modules
+- `tests/test_internal.py` — monkeypatch key pinning in `client` fixture; mock `storage.keys.key_store` for rotate test to avoid DB state leakage across tests
+- `tests/test_webhooks_router.py` — sync fixture (drop `pytest_asyncio`); patch store before `create_app()` so lifespan init runs on the patched instance
+- `tests/test_files_router.py` — monkeypatch key pinning + `with TestClient` lifespan
+- `tests/test_embeddings_router.py` — monkeypatch key pinning
+- `tests/test_audio_router.py` — monkeypatch key pinning
+- `tests/test_fine_tuning_router.py` — monkeypatch key pinning
+- `tests/test_usage_router.py` — monkeypatch key pinning
+
+### Why
+- Tests were passing in isolation but failing in full suite due to `LITELLM_MASTER_KEY` env contamination: pydantic-settings singleton reads env at import time, test modules using `os.environ.setdefault` couldn't override a value already set by a prior module
+- `importlib.reload(config_mod)` in `test_fallback.py` replaced `config_mod.settings` with a new object, breaking all other modules holding references to the old singleton
+- DB state leakage: multiple test modules sharing the same `keys.db` path caused key-rotate test to get 404 in full suite
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| `fec27ac6` | fix(tests): eliminate env contamination — 1057 passing, 0 failures |
