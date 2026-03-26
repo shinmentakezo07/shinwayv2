@@ -9,7 +9,11 @@ from __future__ import annotations
 import re
 from copy import deepcopy
 
+import structlog
+
 from tools.coerce import _fuzzy_match_param
+
+log = structlog.get_logger()
 
 
 def _normalize_name(name: str) -> str:
@@ -50,6 +54,13 @@ class ToolRegistry:
             if not name:
                 continue
             norm = _normalize_name(name)
+            if norm in _ae and _ae[norm] != name:
+                log.warning(
+                    "tool_name_normalization_collision",
+                    name_a=_ae[norm],
+                    name_b=name,
+                    normalized=norm,
+                )
             _ae[norm] = name
             params = fn.get("parameters", {})
             _sm[name] = set(params.get("properties", {}).keys())

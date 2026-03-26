@@ -79,3 +79,19 @@ def test_registry_is_immutable_after_construction():
     reg = ToolRegistry(tools)
     tools.append(_tool("Write", file_path="string"))
     assert reg.canonical_name("Write") is None
+
+
+def test_collision_warning_emitted():
+    """ToolRegistry warns when two tool names normalize to the same string."""
+    import structlog.testing
+    with structlog.testing.capture_logs() as cap:
+        # "write_file" and "write-file" both normalize to "writefile"
+        tools = [
+            _tool("write_file", content="string"),
+            _tool("write-file", content="string"),
+        ]
+        ToolRegistry(tools)
+    assert any(
+        "collision" in str(entry).lower() or "normalization" in str(entry).lower()
+        for entry in cap
+    )
