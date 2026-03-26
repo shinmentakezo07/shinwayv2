@@ -994,7 +994,7 @@ Find the block that builds `allowed_exact` (starts with `allowed_exact: dict[str
 
 The `else` branch must contain the **entire** existing rebuild block verbatim — do not simplify or remove the collision-warning loop.
 
-- [ ] **Step 3: Run registry wiring tests**
+- [ ] **Step 5: Run registry wiring tests**
 
 ```bash
 pytest tests/test_registry_wiring.py::test_with_registry_returns_same_result_as_without tests/test_registry_wiring.py::test_registry_none_still_works -v 2>&1 | tail -10
