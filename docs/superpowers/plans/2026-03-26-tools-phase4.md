@@ -18,7 +18,7 @@
 | `tools/repair.py` | CREATE | `repair_tool_call` |
 | `tools/confidence.py` | CREATE | `CONFIDENCE_THRESHOLD`, `score_tool_call_confidence`, `_find_marker_pos` (from score.py) |
 | `tools/parse.py` | MODIFY | Remove extracted bodies; import from new modules; re-export all names used by existing tests |
-| `tools/score.py` | MODIFY | Re-export `score_tool_call_confidence` and `_find_marker_pos` from `tools/confidence` |
+| `tools/score.py` | UNCHANGED | `confidence.py` imports FROM `score.py` — no change needed; modifying score.py would create a circular import |
 | `tests/test_json_repair.py` | CREATE | Tests for all 7 functions in json_repair.py |
 | `tests/test_repair.py` | CREATE | Tests for repair_tool_call |
 | `tests/test_confidence.py` | CREATE | Tests for CONFIDENCE_THRESHOLD and is_confident helper |
@@ -262,6 +262,7 @@ from tools.json_repair import (  # noqa: F401
 
 ```bash
 python -c "from tools.parse import _lenient_json_loads, _repair_json_control_chars, _escape_unescaped_quotes, _extract_truncated_args, extract_json_candidates; print('OK')"
+python -c "import tools; print('tools __init__ OK')"
 ```
 
 - [ ] **Step 4: Run existing parse tests**
@@ -418,6 +419,7 @@ git commit -m "feat(tools): add repair.py — repair_tool_call extracted from pa
 ```bash
 python -c "from tools.parse import repair_tool_call; print('OK')"
 python -c "from tools.budget import repair_invalid_calls; print('OK')"
+python -c "import tools; print('tools __init__ OK')"
 ```
 
 - [ ] **Step 5: Run parse + budget + repair tests**
@@ -526,7 +528,7 @@ pytest tests/test_confidence.py -v 2>&1 | tail -10
 
 - [ ] **Step 3: Wire `CONFIDENCE_THRESHOLD` into `parse.py`**
 
-In `tools/parse.py`, find the two hardcoded `0.3` references and replace with `CONFIDENCE_THRESHOLD`:
+In `tools/parse.py`, find the **one** hardcoded `0.3` reference (verify with `grep -n '0.3' tools/parse.py`) and replace with `CONFIDENCE_THRESHOLD`:
 
 ```python
 # Add import at top:
