@@ -9,6 +9,7 @@ from __future__ import annotations
 import structlog
 
 from pipeline.params import PipelineParams
+from tools.confidence import CONFIDENCE_THRESHOLD
 from tools.parse import (
     log_tool_calls,
     parse_tool_calls_from_text,
@@ -54,7 +55,7 @@ def _parse_score_repair(
         return []
     confidence = score_tool_call_confidence(text, calls)
     log.debug("tool_call_confidence", score=confidence, calls=len(calls))
-    if confidence < 0.3:
+    if confidence < CONFIDENCE_THRESHOLD:
         log.debug("low_confidence_tool_call_dropped", score=confidence)
         return []
     log_tool_calls(calls, context=context)
