@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import msgspec.json as msgjson
 
+from tools.metrics import inc_schema_validation
 from tools.parse import validate_tool_call
 from tools.schema import validate_schema
 
@@ -72,4 +73,6 @@ def validate_tool_call_full(
         args_dict = {}
 
     # Step 4: full schema enforcement (type, enum, bounds)
-    return validate_schema(args_dict, parameters, tool_name=name)
+    ok, errors = validate_schema(args_dict, parameters, tool_name=name)
+    inc_schema_validation("passed" if ok else "failed")
+    return ok, errors

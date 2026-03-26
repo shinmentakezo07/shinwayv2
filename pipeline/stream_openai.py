@@ -18,6 +18,7 @@ from converters.from_cursor import (
 from cursor.client import CursorClient
 from handlers import StreamAbortError, TimeoutError
 from pipeline.params import PipelineParams
+from tools.budget import deduplicate_tool_calls as _deduplicate_tool_calls
 from tools.budget import limit_tool_calls as _limit_tool_calls
 from tools.budget import repair_invalid_calls as _repair_invalid_calls
 from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter
@@ -280,6 +281,7 @@ async def _openai_stream(
                 )
                 log_tool_calls(final_calls, context="openai_stream_finish", request_id=params.request_id)
                 final_calls = _repair_invalid_calls(final_calls, params.tools)
+                final_calls = _deduplicate_tool_calls(final_calls)
                 for chunk in tool_emitter.emit(final_calls):
                     yield chunk
                 finish_reason = "tool_calls"

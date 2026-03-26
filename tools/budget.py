@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import structlog
 
+from tools.metrics import inc_tool_repair
 from tools.parse import repair_tool_call
 from tools.validate import validate_tool_call_full
 
@@ -43,12 +44,14 @@ def repair_invalid_calls(
         ok, errs = validate_tool_call_full(call, tools)
         if ok:
             out.append(call)
+            inc_tool_repair("passed")
             continue
         repaired, repairs = repair_tool_call(call, tools)
         if repairs:
             ok2, errs2 = validate_tool_call_full(repaired, tools)
             if ok2:
                 out.append(repaired)
+                inc_tool_repair("repaired")
             else:
                 log.warning(
                     "tool_call_unrepairable",
@@ -56,6 +59,7 @@ def repair_invalid_calls(
                     original_errors=errs,
                     post_repair_errors=errs2,
                 )
+                inc_tool_repair("dropped")
         else:
             log.warning(
                 "tool_call_validation_failed",
@@ -63,6 +67,7 @@ def repair_invalid_calls(
                 errors=errs,
             )
             out.append(call)  # case 4: pass through — non-fatal
+            inc_tool_repair("passed_through")
     return out
 
 

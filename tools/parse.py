@@ -41,9 +41,7 @@ _JSON_FENCE_RE = re.compile(
 )
 
 
-def _normalize_name(name: str) -> str:
-    """Normalize tool name for fuzzy matching — lowercase, strip separators."""
-    return re.sub(r"[-_\s]", "", (name or "").lower())
+from tools.results import _normalize_name  # noqa: F401 — defined in results.py, shared here
 
 
 def _repair_json_control_chars(text: str) -> str:
