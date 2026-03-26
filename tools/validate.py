@@ -65,7 +65,7 @@ def validate_tool_call_full(
         try:
             args_dict: dict = msgjson.decode(args_raw.encode()) if args_raw else {}
         except Exception:
-            args_dict = {}
+            return False, [f"arguments is not valid JSON for tool '{name}'"]
     elif isinstance(args_raw, dict):
         args_dict = args_raw
     else:
