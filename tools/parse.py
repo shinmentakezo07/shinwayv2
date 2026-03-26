@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import re
 import uuid
+from typing import TYPE_CHECKING
 
 import msgspec.json as msgjson
 import structlog
+
+if TYPE_CHECKING:
+    from tools.registry import ToolRegistry
 
 try:
     from metrics.parse_metrics import inc_parse_outcome
@@ -915,6 +919,7 @@ def parse_tool_calls_from_text(
     text: str,
     tools: list[dict] | None,
     streaming: bool = False,
+    registry: "ToolRegistry | None" = None,
 ) -> list[dict] | None:
     """Parse tool calls from assistant response text.
 
@@ -927,45 +932,52 @@ def parse_tool_calls_from_text(
         log.debug("tool_parse_skipped_no_tools")
         return None
 
-    # Build exact and fuzzy name lookups: normalized → canonical name.
-    # Detect normalization collisions (e.g. write_file vs write-file both → writefile)
-    # and warn — the last tool registered would silently win otherwise.
-    allowed_exact: dict[str, str] = {}
-    for t in tools:
-        if isinstance(t, dict):
-            orig = t.get("function", {}).get("name", "")
-            if orig:
-                norm = _normalize_name(orig)
-                if norm in allowed_exact and allowed_exact[norm] != orig:
-                    log.warning(
-                        "tool_name_normalization_collision",
-                        name_a=allowed_exact[norm],
-                        name_b=orig,
-                        normalized=norm,
-                    )
-                allowed_exact[norm] = orig
+    if registry is not None:
+        allowed_exact = registry.allowed_exact()
+        schema_map = registry.schema_map()
+        # NOTE: ToolRegistry silently overwrites on tool name collision.
+        # The no-registry path emits a tool_name_normalization_collision warning.
+        # Accepted trade-off for the rebuild elimination.
+    else:
+        # Build exact and fuzzy name lookups: normalized → canonical name.
+        # Detect normalization collisions (e.g. write_file vs write-file both → writefile)
+        # and warn — the last tool registered would silently win otherwise.
+        allowed_exact: dict[str, str] = {}
+        for t in tools:
+            if isinstance(t, dict):
+                orig = t.get("function", {}).get("name", "")
+                if orig:
+                    norm = _normalize_name(orig)
+                    if norm in allowed_exact and allowed_exact[norm] != orig:
+                        log.warning(
+                            "tool_name_normalization_collision",
+                            name_a=allowed_exact[norm],
+                            name_b=orig,
+                            normalized=norm,
+                        )
+                    allowed_exact[norm] = orig
 
-    # Always allow the-editor's backend documentation tools — the backend injects
-    # read_file/read_dir into every session regardless of the client's tool list.
-    # Without this, any time the model calls a docs tool the call is dropped.
-    _CURSOR_BACKEND_TOOLS: dict[str, set[str]] = {
-        "read_file": {"filePath"},
-        "read_dir": {"dirPath"},
-    }
-    for _bt in _CURSOR_BACKEND_TOOLS:
-        allowed_exact[_normalize_name(_bt)] = _bt
+        # Always allow the-editor's backend documentation tools — the backend injects
+        # read_file/read_dir into every session regardless of the client's tool list.
+        # Without this, any time the model calls a docs tool the call is dropped.
+        _CURSOR_BACKEND_TOOLS: dict[str, set[str]] = {
+            "read_file": {"filePath"},
+            "read_dir": {"dirPath"},
+        }
+        for _bt in _CURSOR_BACKEND_TOOLS:
+            allowed_exact[_normalize_name(_bt)] = _bt
 
-    # Build schema lookup: canonical name → valid param names
-    schema_map: dict[str, set[str]] = {}
-    for t in tools:
-        fn = t.get("function", {})
-        tname = fn.get("name", "")
-        props = fn.get("parameters", {}).get("properties", {})
-        if tname:
-            schema_map[tname] = set(props.keys())
+        # Build schema lookup: canonical name → valid param names
+        schema_map: dict[str, set[str]] = {}
+        for t in tools:
+            fn = t.get("function", {})
+            tname = fn.get("name", "")
+            props = fn.get("parameters", {}).get("properties", {})
+            if tname:
+                schema_map[tname] = set(props.keys())
 
-    # Add schema for backend tools
-    schema_map.update(_CURSOR_BACKEND_TOOLS)
+        # Add schema for backend tools
+        schema_map.update(_CURSOR_BACKEND_TOOLS)
 
     # During streaming, only look at text AFTER the [assistant_tool_calls] marker.
     # Use the strict anchored marker detection so we don't pick up the marker

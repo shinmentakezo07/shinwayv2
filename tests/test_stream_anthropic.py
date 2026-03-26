@@ -105,7 +105,7 @@ class _SlowMonitor:
 
 
 class _FakeParser:
-    def __init__(self, tools):
+    def __init__(self, tools, **kwargs):
         self._marker_confirmed = False
         self._marker_pos = -1
         self._buf = ''
@@ -349,7 +349,7 @@ async def test_anthropic_stream_closes_thinking_before_tool_use(monkeypatch):
                  'function': {'name': 'lookup', 'arguments': '{"q":"x"}'}}
 
     class _ThinkingThenToolParser:
-        def __init__(self, tools):
+        def __init__(self, tools, **kwargs):
             self._marker_confirmed = False
             self._marker_pos = -1
             self._buf = ''
@@ -449,7 +449,7 @@ async def test_anthropic_stream_recovers_tool_calls_at_finish(monkeypatch):
                  'function': {'name': 'lookup', 'arguments': '{"q":"test"}'}}
 
     class _RecoveringParser:
-        def __init__(self, tools):
+        def __init__(self, tools, **kwargs):
             self._marker_confirmed = False
             self._marker_pos = -1
             self._buf = ''
@@ -490,7 +490,7 @@ async def test_anthropic_stream_recovery_tps_branch(monkeypatch):
                  'function': {'name': 'lookup', 'arguments': '{}'}}
 
     class _RecoveringParser:
-        def __init__(self, tools):
+        def __init__(self, tools, **kwargs):
             self._marker_confirmed = False
             self._marker_pos = -1
             self._buf = ''
@@ -564,7 +564,7 @@ async def test_anthropic_stream_parallel_tool_calls_false_limits_to_one(monkeypa
     call2 = {"id": "c2", "type": "function", "function": {"name": "bash", "arguments": '{"command": "echo 2"}'}} 
 
     class _FakeParser2:
-        def __init__(self, t):
+        def __init__(self, t, **kwargs):
             self._marker_confirmed = True
             self._marker_pos = 0
         def feed(self, chunk):

@@ -27,6 +27,7 @@ from tools.emitter import compute_tool_signature as _compute_tool_signature
 from tools.emitter import stream_anthropic_tool_input as _stream_anthropic_tool_input
 from pipeline.suppress import _is_suppressed
 from tools.parse import _find_marker_pos, log_tool_calls
+from tools.registry import ToolRegistry
 import utils.stream_monitor as _stream_monitor_mod
 
 
@@ -68,7 +69,8 @@ async def _anthropic_stream(
     tool_mode = False
     emitted_sigs: set[str] = set()
     _marker_offset: int = -1  # -1 = marker not found yet
-    _stream_parser = pkg.StreamingToolCallParser(params.tools) if params.tools else None
+    _registry = ToolRegistry(params.tools) if params.tools else None
+    _stream_parser = pkg.StreamingToolCallParser(params.tools, registry=_registry) if params.tools else None
 
     # Fix #1/#2: track processed-length offset to avoid O(n²) re-scanning
     acc_visible_processed = 0
@@ -134,7 +136,7 @@ async def _anthropic_stream(
                 if _marker_offset < 0:
                     _marker_offset = _find_marker_pos(acc)
                 _parse_slice = acc[_marker_offset:] if _marker_offset >= 0 else acc
-                _raw_results = pkg.parse_tool_calls_from_text(_parse_slice, params.tools, streaming=True) or []
+                _raw_results = pkg.parse_tool_calls_from_text(_parse_slice, params.tools, streaming=True, registry=_registry) or []
                 # C2 fix: apply parallel_tool_calls limit
                 _parse_results = _limit_tool_calls(_raw_results, params.parallel_tool_calls)
             for tc in _parse_results:
@@ -257,7 +259,7 @@ async def _anthropic_stream(
         # L1 fix: 'not tool_mode' is redundant here — we are already in the
         # else branch of 'if tool_mode', so tool_mode is always False here.
         if params.tools:
-            final_calls = (_stream_parser.finalize() if _stream_parser else None) or pkg.parse_tool_calls_from_text(acc, params.tools, streaming=False)
+            final_calls = (_stream_parser.finalize() if _stream_parser else None) or pkg.parse_tool_calls_from_text(acc, params.tools, streaming=False, registry=_registry)
             if final_calls:
                 log.info(
                     "stream_tool_calls_recovered_at_finish",

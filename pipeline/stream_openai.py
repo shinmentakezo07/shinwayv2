@@ -22,6 +22,7 @@ from tools.budget import limit_tool_calls as _limit_tool_calls
 from tools.budget import repair_invalid_calls as _repair_invalid_calls
 from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter
 from tools.parse import _find_marker_pos, log_tool_calls
+from tools.registry import ToolRegistry
 import utils.stream_monitor as _stream_monitor_mod
 
 
@@ -117,7 +118,8 @@ async def _openai_stream(
     _cached_visible: str = ""       # last sanitize_visible_text result
     _cached_acc_len: int = 0        # len(acc) when _cached_visible was computed
     tool_emitter = _OpenAIToolEmitter(cid, model, created=created_ts) if params.tools else None
-    _stream_parser = pkg.StreamingToolCallParser(params.tools) if params.tools else None
+    _registry = ToolRegistry(params.tools) if params.tools else None
+    _stream_parser = pkg.StreamingToolCallParser(params.tools, registry=_registry) if params.tools else None
 
     monitor = _stream_monitor_mod.StreamMonitor(
         first_token_timeout=settings.first_token_timeout,

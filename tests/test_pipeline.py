@@ -488,7 +488,7 @@ async def test_anthropic_stream_emits_input_json_delta_chunks_for_tool_args(monk
 
     class FakeStreamingParser:
         """Mirrors StreamingToolCallParser API; delegates to fake_parse_tool_calls."""
-        def __init__(self, _tools):
+        def __init__(self, _tools, **kwargs):
             self._marker_confirmed = False
             self._marker_pos = -1
             self._buf = ""

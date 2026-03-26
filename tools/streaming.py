@@ -6,7 +6,12 @@ tools.parse inside __init__ to avoid circular imports at module load time.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from tools.score import _find_marker_pos
+
+if TYPE_CHECKING:
+    from tools.registry import ToolRegistry
 
 
 class StreamingToolCallParser:
@@ -19,10 +24,11 @@ class StreamingToolCallParser:
 
     _LOOKBACK = len("[assistant_tool_calls]")
 
-    def __init__(self, tools: list[dict]) -> None:
+    def __init__(self, tools: list[dict], registry: "ToolRegistry | None" = None) -> None:
         from tools.parse import parse_tool_calls_from_text as _ptcft
         self._parse = _ptcft
         self._tools = tools
+        self._registry = registry
         self.buf = ""
         self._scan_pos = 0
         self._marker_confirmed = False
@@ -102,7 +108,8 @@ class StreamingToolCallParser:
                         self._json_complete = True
                         self._scan_pos = i + 1
                         self._last_result = self._parse(
-                            buf[self._marker_pos:], self._tools, streaming=True
+                            buf[self._marker_pos:], self._tools, streaming=True,
+                            registry=self._registry,
                         )
                         return self._last_result
             i += 1
@@ -114,4 +121,4 @@ class StreamingToolCallParser:
         if not self.buf:
             return None
         parse_slice = self.buf[self._marker_pos:] if self._marker_pos >= 0 else self.buf
-        return self._parse(parse_slice, self._tools, streaming=False)
+        return self._parse(parse_slice, self._tools, streaming=False, registry=self._registry)

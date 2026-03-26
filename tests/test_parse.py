@@ -524,10 +524,10 @@ def test_streaming_parser_calls_parse_once():
     call_count = 0
     original = _parse_mod.parse_tool_calls_from_text
 
-    def counting_parse(text, tools, streaming=False):
+    def counting_parse(text, tools, streaming=False, **kwargs):
         nonlocal call_count
         call_count += 1
-        return original(text, tools, streaming=streaming)
+        return original(text, tools, streaming=streaming, **kwargs)
 
     _parse_mod.parse_tool_calls_from_text = counting_parse
     try:
