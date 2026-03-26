@@ -358,17 +358,21 @@ class TestFallbackChainConfig:
     """Tests for the SHINWAY_FALLBACK_CHAIN config field."""
 
     def test_fallback_chain_defaults_to_empty_object(self):
-        """settings.fallback_chain defaults to '{}' when env var is absent."""
-        import importlib
-        import config as config_mod
-        importlib.reload(config_mod)
-        assert config_mod.settings.fallback_chain == "{}"
+        """settings.fallback_chain defaults to '{}' when SHINWAY_FALLBACK_CHAIN is not set."""
+        # Test the default value directly on the pydantic model field without reloading —
+        # importlib.reload breaks singleton references held by other modules.
+        from config import Settings
+        import os
+        env = {k: v for k, v in os.environ.items() if k != "SHINWAY_FALLBACK_CHAIN"}
+        fresh = Settings(_env_file=None, **{"LITELLM_MASTER_KEY": "sk-test"})
+        assert fresh.fallback_chain == "{}"
 
     def test_fallback_chain_env_var_stored_verbatim(self, monkeypatch):
         """SHINWAY_FALLBACK_CHAIN is stored as the raw JSON string."""
         chain = '{"anthropic/claude-opus-4.6":["anthropic/claude-sonnet-4.6"]}'
-        monkeypatch.setenv("SHINWAY_FALLBACK_CHAIN", chain)
-        import importlib
-        import config as config_mod
-        importlib.reload(config_mod)
-        assert config_mod.settings.fallback_chain == chain
+        from config import Settings
+        fresh = Settings(
+            _env_file=None,
+            **{"LITELLM_MASTER_KEY": "sk-test", "SHINWAY_FALLBACK_CHAIN": chain},
+        )
+        assert fresh.fallback_chain == chain

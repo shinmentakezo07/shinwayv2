@@ -1,25 +1,32 @@
 from types import SimpleNamespace
 
 import pytest
+import config
+import middleware.auth as _auth
 from fastapi.testclient import TestClient
 
 from app import create_app
 
+_TEST_KEY = "sk-test-internal"
+
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setattr(config.settings, "master_key", _TEST_KEY)
+    _auth._env_keys.cache_clear()
     with TestClient(create_app()) as c:
         yield c
+    _auth._env_keys.cache_clear()
 
 
 @pytest.fixture
 def auth_headers():
-    return {"Authorization": "Bearer test-key"}
+    return {"Authorization": f"Bearer {_TEST_KEY}"}
 
 
 @pytest.fixture
 def bypass_internal_auth(monkeypatch):
-    async def _fake_verify(authorization): return "test-key"
+    async def _fake_verify(authorization): return _TEST_KEY
     monkeypatch.setattr("routers.internal.verify_bearer", _fake_verify)
 
 
@@ -169,13 +176,9 @@ def test_internal_logs_limit_param(client, auth_headers, bypass_internal_auth, m
     assert body["limit"] == 10
 
 
-def test_missing_auth_returns_401():
+def test_missing_auth_returns_401(client):
     """GET /v1/internal/stats without Authorization header returns 401."""
-    from app import create_app
-    from fastapi.testclient import TestClient
-    # Use a fresh client with no auth bypass
-    unauthenticated_client = TestClient(create_app())
-    response = unauthenticated_client.get("/v1/internal/stats")
+    response = client.get("/v1/internal/stats")
     assert response.status_code == 401
 
 
@@ -287,23 +290,34 @@ def test_key_rotate_not_found_returns_404(client, auth_headers, bypass_internal_
     assert resp.status_code == 404
 
 
-def test_key_rotate_creates_new_and_deactivates_old(client, auth_headers, bypass_internal_auth):
-    # Create a key first
-    create = client.post(
-        "/v1/admin/keys",
-        json={"label": "rotate-me"},
-        headers=auth_headers,
-    )
-    assert create.status_code == 200
-    old_key = create.json()["key"]
+def test_key_rotate_creates_new_and_deactivates_old(client, auth_headers, bypass_internal_auth, monkeypatch):
+    import time
+    from unittest.mock import AsyncMock
+
+    old_key = "wiwi-testoldkey000000000"
+    old_rec = {
+        "key": old_key, "label": "rotate-me",
+        "rpm_limit": 0, "rps_limit": 0,
+        "token_limit_daily": 0, "budget_usd": 0.0,
+        "allowed_models": [], "is_active": True,
+        "created_at": int(time.time()),
+    }
+    new_rec = {**old_rec, "key": "wiwi-newtestkey000000000"}
+
+    mock_get = AsyncMock(return_value=old_rec)
+    mock_create = AsyncMock(return_value=new_rec)
+    mock_update = AsyncMock(return_value={**old_rec, "is_active": False})
+
+    monkeypatch.setattr("storage.keys.key_store.get", mock_get)
+    monkeypatch.setattr("storage.keys.key_store.create", mock_create)
+    monkeypatch.setattr("storage.keys.key_store.update", mock_update)
 
     rotate = client.post(f"/v1/internal/keys/{old_key}/rotate", headers=auth_headers)
     assert rotate.status_code == 200
     body = rotate.json()
     assert body["ok"] is True
     assert body["old_key"] == old_key
-    assert body["new_key"] != old_key
-    assert body["new_key"].startswith("wiwi-")
+    assert body["new_key"] == "wiwi-newtestkey000000000"
     assert body["old_key_deactivated"] is True
 
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 import os
 import pytest
-import pytest_asyncio
 os.environ.setdefault("LITELLM_MASTER_KEY", "sk-test")
 os.environ.setdefault("CURSOR_COOKIE", "WorkosCursorSessionToken=test")
 
@@ -13,31 +12,33 @@ from fastapi.testclient import TestClient
 _TEST_KEY = "sk-test-webhooks"
 
 
-@pytest_asyncio.fixture()
-async def client(tmp_path, monkeypatch):
-    # Pin master_key so env contamination from other test modules doesn't break auth.
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    # Pin master_key synchronously so the patch is guaranteed before create_app()
     monkeypatch.setattr(config.settings, "master_key", _TEST_KEY)
     _auth._env_keys.cache_clear()
 
-    # Build a fresh WebhookStore backed by a temp DB, init it, then patch
-    # both the storage module singleton AND the router's imported reference
-    # so the lifespan and the router see the same initialised instance.
     import routers.webhooks as _rw
     import storage.webhooks as _sw
     from storage.webhooks import WebhookStore
 
-    store = WebhookStore(db_path=str(tmp_path / "webhooks.db"))
-    await store.init()
+    import routers.webhooks as _rw
+    import storage.webhooks as _sw
+    from storage.webhooks import WebhookStore
 
+    # Patch the webhook_store singleton with a tmp-path store BEFORE create_app().
+    # The app lifespan will call webhook_store.init() on this patched instance,
+    # using the TestClient's own event loop — avoiding cross-loop connection issues.
+    store = WebhookStore(db_path=str(tmp_path / "webhooks.db"))
     original = _sw.webhook_store
     _sw.webhook_store = store
     _rw.webhook_store = store
 
     from app import create_app
     with TestClient(create_app()) as c:
+        # At this point lifespan has run and store is initialised by the app
         yield c
 
-    await store.close()
     _sw.webhook_store = original
     _rw.webhook_store = original
     _auth._env_keys.cache_clear()
