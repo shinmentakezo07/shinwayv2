@@ -18,6 +18,10 @@ from tools.parse import (
     validate_tool_call,
 )
 
+# budget.py extracted — re-exported here for pipeline/__init__.py backward compat
+from tools.budget import limit_tool_calls as _limit_tool_calls  # noqa: F401
+from tools.budget import repair_invalid_calls as _repair_invalid_calls  # noqa: F401
+
 
 log = structlog.get_logger()
 

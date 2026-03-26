@@ -21,12 +21,9 @@ from converters.from_cursor import (
 from cursor.client import CursorClient
 from handlers import StreamAbortError, TimeoutError
 from pipeline.params import PipelineParams
-from pipeline.tools import (
-    _compute_tool_signature,
-    _limit_tool_calls,
-    _repair_invalid_calls,
-    _stream_anthropic_tool_input,
-)
+from tools.budget import limit_tool_calls as _limit_tool_calls
+from tools.budget import repair_invalid_calls as _repair_invalid_calls
+from pipeline.tools import _compute_tool_signature, _stream_anthropic_tool_input  # emitter chunk
 from pipeline.suppress import _is_suppressed
 from tools.parse import _find_marker_pos, log_tool_calls
 import utils.stream_monitor as _stream_monitor_mod
