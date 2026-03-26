@@ -4959,3 +4959,31 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | SHA | Description |
 |---|---|
 | `18106f49` | feat(routers): add embeddings, audio, fine_tuning, files, usage, webhooks routers |
+
+## Session 151 — Router gap fills: batch list, file content, quota API, admin views (2026-03-26)
+
+### What changed
+- `routers/batch.py` — added `GET /v1/batch` list endpoint (`list_batches`); `BatchStore.list_by_key` was implemented but never exposed
+- `routers/files.py` — added `_file_content` dict for raw byte storage; `upload_file` now stores content; added `GET /v1/files/{file_id}/content` endpoint; `delete_file` now cleans both dicts
+- `routers/internal.py` — added `GET /v1/internal/quota/{key}` (24h usage vs limit), `POST /v1/internal/quota/{key}/reset` (clear quota window), `GET /v1/admin/webhooks` (cross-key admin), `GET /v1/admin/files` (cross-key admin)
+- `tests/test_batch.py` — 3 new tests for `GET /v1/batch`
+- `tests/test_files_router.py` — 3 new tests for content download; fixed fixture to use `monkeypatch` + `with TestClient` for lifespan and auth isolation
+- `tests/test_internal.py` — 6 new tests for quota/admin endpoints; fixed fixture to use `with TestClient` so lifespan runs
+- `requirements.txt` — added `python-multipart>=0.0.9` (required by `UploadFile`/`Form` in files router)
+
+### Which lines / functions
+- `routers/batch.py:list_batches` — new endpoint before `get_batch`
+- `routers/files.py:_file_content` — module-level dict; `upload_file` stores bytes; `get_file_content` new endpoint; `delete_file` pops from both dicts
+- `routers/internal.py:quota_status`, `quota_reset`, `admin_list_webhooks`, `admin_list_files` — appended before `credential_add`
+
+### Why
+- `GET /v1/batch` — OpenAI SDK calls this to list jobs; `list_by_key` existed in storage but was never routed
+- File content endpoint — SDKs call `/v1/files/{id}/content` after upload; was 404ing silently
+- Quota API — operators need to inspect and reset per-key token windows without restarting
+- Admin cross-key views — no way to audit all webhooks/files across tenants without direct DB access
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| `a0c2d124` | fix(deps): add python-multipart |
+| `cf4b07d2` | feat(routers): fill missing API surface gaps |
