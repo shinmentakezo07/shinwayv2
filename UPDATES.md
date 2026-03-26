@@ -4783,3 +4783,25 @@ Phase 3 Chunk 6: `_build_tool_call_results` is a self-contained result-building 
 |-----|-------------|
 | `86cf20c3` | feat(tools): add results.py — _build_tool_call_results extracted from parse.py (copy step) |
 | `ace8e92c` | refactor(tools): parse.py imports _build_tool_call_results from tools/results |
+
+## Session 145 — tools/ Phase 3 Chunk 5: sanitize.py extracted from cursor_helpers.py (2026-03-26)
+
+### What changed
+- `tools/sanitize.py` — new module containing `_CURSOR_REPLACEMENT`, `_CURSOR_WORD_RE`, and `_sanitize_user_content` (copied verbatim from `converters/cursor_helpers.py`)
+- `converters/cursor_helpers.py` — removed the three items above (35 lines); removed now-unused `import re`; added re-exports from `tools.sanitize`
+- `tests/test_sanitize.py` — 8 new tests covering: standalone replacement, lowercase replacement, path component preservation, Windows path preservation, trailing extension behaviour, empty string, backward-compat re-export, compiled regex type
+
+### Which lines / functions
+- `tools/sanitize.py:_CURSOR_REPLACEMENT` — constant `"the-editor"`; copied from `converters/cursor_helpers.py` line 34
+- `tools/sanitize.py:_CURSOR_WORD_RE` — compiled regex with lookbehind/lookahead for path exclusion; copied from `converters/cursor_helpers.py` lines 42-46
+- `tools/sanitize.py:_sanitize_user_content` — function body copied from `converters/cursor_helpers.py` lines 49-62
+- `converters/cursor_helpers.py` — blocker section deleted; `import re` removed; two re-export lines added at line 28-30
+
+### Why
+Phase 3 Chunk 5: `_sanitize_user_content` is a standalone sanitization concern with no dependency on converters/. Extracting it into `tools/sanitize.py` gives it a focused home, breaks the `tools/ → converters/` dependency direction, and keeps `cursor_helpers.py` as a thin re-exporter for backward compat.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `3f3f8eed` | feat(tools): add sanitize.py — _sanitize_user_content, _CURSOR_WORD_RE (copy; cursor_helpers intact) |
+| `2eaa183f` | refactor(converters): cursor_helpers re-exports _sanitize_user_content from tools/sanitize |
