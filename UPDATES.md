@@ -4762,3 +4762,24 @@ Phase 2 closes the gaps left after Phase 1: `validate_schema` was dead code — 
 | `8cbf6565` | feat(tools): wire ToolRegistry into parse_tool_calls_from_text and StreamingToolCallParser |
 | `3a2e6b93` | refactor(pipeline): tools.py removes moved bodies; only re-exports and _parse_score_repair remain |
 | `1e3f1d7b` | test(tools): improve validate.py coverage to 86% |
+
+## Session 144 — tools/ Phase 3 Chunk 6: results.py extracted from parse.py (2026-03-26)
+
+### What changed
+- `tools/results.py` — new module containing `_normalize_name` and `_build_tool_call_results` (copied from `tools/parse.py`)
+- `tools/parse.py` — removed `_build_tool_call_results` function body (89 lines); added re-export `from tools.results import _build_tool_call_results`
+- `tests/test_results.py` — 5 new tests covering: valid call normalisation, unknown tool dropped, arguments-always-JSON-string invariant, fuzzy name correction, id assignment
+
+### Which lines / functions
+- `tools/results.py:_normalize_name` — copied from `tools/parse.py` line 43; lowercase + strip separators
+- `tools/results.py:_build_tool_call_results` — copied verbatim from `tools/parse.py` lines 823–911; builds normalized tool call dicts from merged parsed candidates
+- `tools/parse.py` — function body deleted; re-export alias added after `tools.streaming` import block
+
+### Why
+Phase 3 Chunk 6: `_build_tool_call_results` is a self-contained result-building concern that belongs in its own module. Extracting it reduces `parse.py` from 1093 → 1004 lines (-89) and gives the function a focused home with dedicated test coverage.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `86cf20c3` | feat(tools): add results.py — _build_tool_call_results extracted from parse.py (copy step) |
+| `ace8e92c` | refactor(tools): parse.py imports _build_tool_call_results from tools/results |
