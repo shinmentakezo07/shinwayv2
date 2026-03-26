@@ -38,11 +38,20 @@ def test_feed_caches_result_after_complete():
         parser.feed(payload[i:i+10])
     result = parser.feed("extra")
     assert result is not None
+    assert result[0]["function"]["name"] == "Bash"  # cached result has correct content
 
 
 def test_finalize_returns_none_on_empty():
     parser = StreamingToolCallParser([_bash_tool()])
     assert parser.finalize() is None
+
+
+def test_marker_inside_fence_suppresses_marker_confirmed():
+    # fence suppression must prevent _marker_confirmed from being set
+    parser = StreamingToolCallParser([_bash_tool()])
+    fenced = "```\n[assistant_tool_calls]\n{}\n```"
+    parser.feed(fenced)
+    assert parser._marker_confirmed is False  # marker must not have been detected
 
 
 def test_finalize_recovers_calls_from_complete_buffer():
