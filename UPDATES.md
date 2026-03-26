@@ -4577,3 +4577,26 @@ UI enhancement pass: richer data visualization, filter UX, animated health ring,
 ### Commit SHAs
 | SHA | Description |
 |-----|-------------|
+| `90a7c5ed` | feat(admin-ui): overhaul credentials & login UI, fix auto-login stale closure |
+
+---
+
+## Session 80 — tools/score.py extraction (2026-03-26)
+
+### What changed
+- `tools/score.py` — created
+- `tests/test_score.py` — created
+
+### Which lines / functions
+- `tools/score.py:_TOOL_CALL_MARKER_RE` — regex constant copied verbatim from `tools/parse.py` line 31
+- `tools/score.py:_find_marker_pos` — copied verbatim from `tools/parse.py` lines 37–57
+- `tools/score.py:score_tool_call_confidence` — copied verbatim from `tools/parse.py` lines 1086–1118
+- `tests/test_score.py` — 8 tests covering: marker present/fenced/absent, confidence high/zero/low/clamped, low without marker on long text
+
+### Why
+Chunk 2 of the tools/ refactor plan (`docs/superpowers/plans/2026-03-25-tools-refactor.md`). `score_tool_call_confidence` and `_find_marker_pos` are co-dependent and belong in a focused module with no imports from other `tools/` modules. Extracted verbatim — `tools/parse.py` not yet modified (that happens in Chunk 4).
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `2e59718c` | feat(tools): extract score.py — score_tool_call_confidence, _find_marker_pos |
