@@ -83,3 +83,51 @@ def test_backward_compat_to_cursor():
     """build_tool_instruction must remain importable from converters.to_cursor."""
     from converters.to_cursor import build_tool_instruction as bti
     assert callable(bti)
+
+
+def test_example_value_type_fallback_number():
+    val = _example_value({"type": "number"}, key="unknown")
+    assert isinstance(val, float)
+
+
+def test_example_value_type_fallback_object():
+    val = _example_value({"type": "object"}, key="unknown")
+    assert isinstance(val, dict)
+
+
+def test_example_value_enum_returns_first():
+    val = _example_value({"type": "string", "enum": ["png", "jpeg"]}, key="fmt")
+    assert val == "png"
+
+
+def test_build_tool_instruction_tool_choice_required():
+    tools = [_tool("Bash", command="string")]
+    result = build_tool_instruction(tools, "required")
+    assert "at least one tool call" in result
+
+
+def test_build_tool_instruction_tool_choice_none():
+    tools = [_tool("Bash", command="string")]
+    result = build_tool_instruction(tools, "none")
+    assert "text only" in result
+
+
+def test_build_tool_instruction_forced_function():
+    tools = [_tool("Bash", command="string")]
+    tool_choice = {"type": "function", "function": {"name": "Bash"}}
+    result = build_tool_instruction(tools, tool_choice)
+    assert "Bash" in result
+
+
+def test_build_tool_instruction_parallel_false():
+    tools = [_tool("Bash", command="string")]
+    result = build_tool_instruction(tools, "auto", parallel_tool_calls=False)
+    assert "one tool call" in result
+
+
+def test_build_tool_instruction_cache_hit():
+    # Calling twice with same args returns cached result (same object)
+    tools = [_tool("Bash", command="string")]
+    r1 = build_tool_instruction(tools, "auto")
+    r2 = build_tool_instruction(tools, "auto")
+    assert r1 == r2

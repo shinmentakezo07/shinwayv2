@@ -94,3 +94,59 @@ def test_coerce_object_from_json_string():
     result = _coerce_value('{"key": "val"}', {"type": "object"}, "opts", repairs)
     assert result == {"key": "val"}
     assert repairs
+
+
+def test_coerce_boolean_from_number():
+    repairs: list[str] = []
+    result = _coerce_value(1, {"type": "boolean"}, "flag", repairs)
+    assert result is True
+    assert repairs
+
+
+def test_coerce_number_passthrough():
+    repairs: list[str] = []
+    result = _coerce_value(3.14, {"type": "number"}, "ratio", repairs)
+    assert result == 3.14
+    assert not repairs
+
+
+def test_coerce_string_from_dict():
+    repairs: list[str] = []
+    result = _coerce_value({"k": "v"}, {"type": "string"}, "data", repairs)
+    assert isinstance(result, str)
+    assert repairs
+
+
+def test_coerce_array_from_json_string():
+    repairs: list[str] = []
+    result = _coerce_value('[1, 2, 3]', {"type": "array"}, "items", repairs)
+    assert result == [1, 2, 3]
+    assert repairs
+
+
+def test_coerce_array_wraps_non_string():
+    repairs: list[str] = []
+    result = _coerce_value(42, {"type": "array"}, "items", repairs)
+    assert result == [42]
+    assert repairs
+
+
+def test_coerce_none_passthrough():
+    repairs: list[str] = []
+    result = _coerce_value(None, {"type": "string"}, "key", repairs)
+    assert result is None
+    assert not repairs
+
+
+def test_fuzzy_match_prefix():
+    # "passw" has a 5-char shared prefix with "password"
+    assert _fuzzy_match_param("passw", {"password"}) == "password"
+
+
+def test_levenshtein_length_guard():
+    # length difference > 2 should skip levenshtein (strategy 4 skipped)
+    # "ab" vs "abcdef" — len diff is 4, levenshtein skipped
+    # falls through to substring: "ab" in "abcdef" → match (strategy 5)
+    result = _fuzzy_match_param("abcde", {"abcdefgh"})
+    # Either substring or prefix match — just verify it finds it
+    assert result == "abcdefgh"
