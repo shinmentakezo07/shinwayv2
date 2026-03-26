@@ -119,6 +119,14 @@ def _repair_invalid_calls(
 from tools.budget import limit_tool_calls as _limit_tool_calls  # noqa: F401
 from tools.budget import repair_invalid_calls as _repair_invalid_calls  # noqa: F401
 
+# emitter.py extracted — re-exported here for pipeline/__init__.py backward compat
+# IMPORTANT: placed after def/class bodies so imports overwrite local definitions.
+from tools.emitter import compute_tool_signature as _compute_tool_signature  # noqa: F401
+from tools.emitter import parse_tool_arguments as _parse_tool_arguments  # noqa: F401
+from tools.emitter import serialize_tool_arguments as _serialize_tool_arguments  # noqa: F401
+from tools.emitter import stream_anthropic_tool_input as _stream_anthropic_tool_input  # noqa: F401
+from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter  # noqa: F401
+
 
 def _parse_score_repair(
     text: str,

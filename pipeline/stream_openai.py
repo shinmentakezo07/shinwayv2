@@ -20,7 +20,7 @@ from handlers import StreamAbortError, TimeoutError
 from pipeline.params import PipelineParams
 from tools.budget import limit_tool_calls as _limit_tool_calls
 from tools.budget import repair_invalid_calls as _repair_invalid_calls
-from pipeline.tools import _OpenAIToolEmitter  # emitter extracted in next chunk
+from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter
 from tools.parse import _find_marker_pos, log_tool_calls
 import utils.stream_monitor as _stream_monitor_mod
 
