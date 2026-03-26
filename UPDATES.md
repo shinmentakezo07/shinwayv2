@@ -4639,3 +4639,29 @@ Chunk 5 of the tools/ refactor plan (`docs/superpowers/plans/2026-03-25-tools-re
 | SHA | Description |
 |-----|-------------|
 | `11e5b882` | feat(tools): add schema.py — validate_schema with full JSON Schema enforcement |
+
+---
+
+## Session 141 — tools/registry.py immutable request-scoped tool registry (2026-03-26)
+
+### What changed
+- `tools/registry.py` — created
+- `tests/test_registry.py` — created
+
+### Which lines / functions
+- `tools/registry.py:ToolRegistry` — immutable request-scoped registry; built once per request from the client tool list; stores normalized→canonical name map, canonical→param set map, canonical→parameters schema map; all state name-mangled at construction to prevent external mutation
+- `tools/registry.py:ToolRegistry.canonical_name` — exact normalized lookup then fuzzy fallback via `_fuzzy_match_param` from `tools/coerce`
+- `tools/registry.py:ToolRegistry.schema` — returns raw `parameters` dict for a canonical tool name
+- `tools/registry.py:ToolRegistry.known_params` — returns `set[str]` of param names for a canonical tool name
+- `tools/registry.py:ToolRegistry.allowed_exact` — returns normalized→canonical dict
+- `tools/registry.py:ToolRegistry.schema_map` — returns canonical→param set dict
+- `tools/registry.py:_CURSOR_BACKEND_TOOLS` — default backend tool set (`read_file`, `read_dir`) injected at construction unless overridden
+- `tools/registry.py:_normalize_name` — strips `-_\s`, lowercases for consistent key lookup
+
+### Why
+Chunk 8 of the tools/ refactor plan. New capability module — not extracted from existing code. Replaces per-call rebuilding of `allowed_exact` / `schema_map` in `parse.py`. Single immutable object per request eliminates redundant dict construction on every tool call repair pass. Deep-copies the input list at construction so caller mutations cannot corrupt registry state.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `445e3a52` | feat(tools): add registry.py — ToolRegistry immutable request-scoped tool lookup |
