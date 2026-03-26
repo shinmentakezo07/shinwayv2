@@ -85,3 +85,18 @@ def test_unknown_tool_no_schema_check():
     ok, errs = validate_tool_call_full(_call("Unknown"), [])
     assert not ok
     assert len(errs) == 1  # only the 'not found' error, no schema errors
+
+
+def test_invalid_json_arguments_returns_error():
+    """Malformed JSON in arguments returns a clear error."""
+    call = {"id": "x", "type": "function", "function": {"name": "Bash", "arguments": "not{json"}}
+    ok, errs = validate_tool_call_full(call, [_tool("Bash", command="string")])
+    assert not ok
+    assert any("JSON" in e for e in errs)
+
+
+def test_arguments_already_dict():
+    """When arguments is already a dict, it is accepted directly."""
+    call = {"id": "x", "type": "function", "function": {"name": "Bash", "arguments": {"command": "ls"}}}
+    ok, errs = validate_tool_call_full(call, [_tool("Bash", command="string")])
+    assert ok
