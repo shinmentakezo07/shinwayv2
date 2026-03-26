@@ -73,6 +73,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from storage.quota import quota_store
     await quota_store.init()
     log.info("quota_store_started")
+    from storage.webhooks import webhook_store
+    await webhook_store.init()
+    log.info("webhook_store_started")
 
     try:
         yield
@@ -86,6 +89,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from storage.quota import quota_store
         await quota_store.close()
         log.info("quota_store_closed")
+        from storage.webhooks import webhook_store
+        await webhook_store.close()
+        log.info("webhook_store_closed")
         await response_store.close()
         log.info("response_store_closed")
         await _http_client.aclose()
@@ -247,12 +253,24 @@ def create_app() -> FastAPI:
     from routers.anthropic import router as anthropic_router
     from routers.responses import router as responses_router
     from routers.batch import router as batch_router
+    from routers.embeddings import router as embeddings_router
+    from routers.audio import router as audio_router
+    from routers.fine_tuning import router as fine_tuning_router
+    from routers.files import router as files_router
+    from routers.usage import router as usage_router
+    from routers.webhooks import router as webhooks_router
 
     app.include_router(internal_router)
     app.include_router(openai_router)
     app.include_router(anthropic_router)
     app.include_router(responses_router)
     app.include_router(batch_router)
+    app.include_router(embeddings_router)
+    app.include_router(audio_router)
+    app.include_router(fine_tuning_router)
+    app.include_router(files_router)
+    app.include_router(usage_router)
+    app.include_router(webhooks_router)
 
     # ── Prometheus metrics ──────────────────────────────────────────────
     if settings.metrics_enabled:

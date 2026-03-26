@@ -283,21 +283,6 @@ async def text_completions(
     })
 
 
-# ── /v1/embeddings (stub) ─────────────────────────────────────────────────────
-
-@router.post("/v1/embeddings")
-async def embeddings(authorization: str | None = Header(default=None)):
-    """Embeddings — not supported."""
-    await verify_bearer(authorization)
-    return JSONResponse(status_code=501, content={
-        "error": {
-            "message": "Embeddings are not supported by this proxy.",
-            "type": "not_implemented_error",
-            "code": "embeddings_not_supported",
-        }
-    })
-
-
 # ── /v1/tools/validate ────────────────────────────────────────────────────────
 
 @router.post("/v1/tools/validate")
