@@ -384,6 +384,104 @@ async def delete_config(
     return {"key": key, "value": default_val, "overridden": False}
 
 
+# ── Quota ────────────────────────────────────────────────────────────────────
+
+@router.get("/v1/internal/quota/{key_prefix:path}")
+async def quota_status(
+    key_prefix: str,
+    authorization: str | None = Header(default=None),
+):
+    """Return 24-hour rolling token usage for a key against its daily limit.
+
+    Reads from QuotaStore (SQLite sliding window). Falls back to the
+    in-process analytics counter when quota_enabled=false.
+    """
+    await verify_bearer(authorization)
+    from config import settings as _s
+    from storage.keys import key_store
+
+    rec = await key_store.get(key_prefix)
+    limit = (rec or {}).get("token_limit_daily", 0)
+
+    if _s.quota_enabled:
+        from storage.quota import quota_store
+        used = await quota_store.get_usage_24h(key_prefix)
+    else:
+        from analytics import analytics
+        used = await analytics.get_daily_tokens(key_prefix)
+
+    return {
+        "key": key_prefix,
+        "token_limit_daily": limit,
+        "tokens_used_24h": used,
+        "tokens_remaining": max(0, limit - used) if limit > 0 else None,
+        "quota_enabled": _s.quota_enabled,
+        "at_limit": limit > 0 and used >= limit,
+    }
+
+
+@router.post("/v1/internal/quota/{key_prefix:path}/reset")
+async def quota_reset(
+    key_prefix: str,
+    authorization: str | None = Header(default=None),
+):
+    """Manually clear the 24-hour quota window for a key.
+
+    Deletes all quota_usage rows for the key — takes effect immediately.
+    Only meaningful when quota_enabled=true.
+    """
+    await verify_bearer(authorization)
+    from config import settings as _s
+    if not _s.quota_enabled:
+        return JSONResponse(
+            status_code=422,
+            content={"error": "quota_enabled is false — no quota rows to reset"},
+        )
+    from storage.quota import quota_store
+    if quota_store._db is None:
+        return JSONResponse(status_code=503, content={"error": "QuotaStore not initialised"})
+    await quota_store._db.execute(
+        "DELETE FROM quota_usage WHERE api_key = ?", (key_prefix,)
+    )
+    await quota_store._db.commit()
+    log.info("quota_reset", key=key_prefix[:16])
+    return {"ok": True, "key": key_prefix, "message": "Quota window cleared"}
+
+
+# ── Admin webhooks (cross-key) ────────────────────────────────────────────────
+
+@router.get("/v1/admin/webhooks")
+async def admin_list_webhooks(
+    authorization: str | None = Header(default=None),
+):
+    """Admin view: list ALL webhook registrations across all API keys."""
+    await verify_bearer(authorization)
+    from storage.webhooks import webhook_store
+    if webhook_store._db is None:
+        return JSONResponse(status_code=503, content={"error": "WebhookStore not initialised"})
+    async with webhook_store._db.execute(
+        "SELECT * FROM webhooks ORDER BY created_at DESC"
+    ) as cur:
+        rows = await cur.fetchall()
+    from storage.webhooks import _to_record
+    data = [_to_record(r) for r in rows]
+    return JSONResponse({"object": "list", "data": data, "count": len(data)})
+
+
+@router.get("/v1/admin/files")
+async def admin_list_files(
+    authorization: str | None = Header(default=None),
+):
+    """Admin view: list ALL uploaded files across all keys (process-lifetime)."""
+    await verify_bearer(authorization)
+    from routers.files import _files
+    return JSONResponse({
+        "object": "list",
+        "data": list(_files.values()),
+        "count": len(_files),
+    })
+
+
 @router.post("/v1/internal/credentials/add")
 async def credential_add(
     body: AddCredentialBody,

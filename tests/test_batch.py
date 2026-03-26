@@ -432,6 +432,38 @@ def test_completed_batch_has_results(client, monkeypatch):
     assert custom_ids == {"req-1", "req-2"}
 
 
+def test_list_batches_returns_empty_for_new_key(client):
+    """GET /v1/batch returns an empty list when no batches exist for the key."""
+    resp = client.get("/v1/batch", headers={"Authorization": f"Bearer {_TEST_KEY}"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["object"] == "list"
+    assert isinstance(body["data"], list)
+    assert "count" in body
+
+
+def test_list_batches_shows_created_batch(client, monkeypatch):
+    """GET /v1/batch includes a batch just created by the same key."""
+    import routers.batch as batch_mod
+    monkeypatch.setattr(batch_mod, "_process_batch", _noop_process)
+
+    client.post(
+        "/v1/batch",
+        headers={"Authorization": f"Bearer {_TEST_KEY}"},
+        json={"model": "gpt-4o", "requests": [{"custom_id": "r1", "body": {"messages": []}}]},
+    )
+    resp = client.get("/v1/batch", headers={"Authorization": f"Bearer {_TEST_KEY}"})
+    assert resp.status_code == 200
+    assert resp.json()["count"] >= 1
+    ids = [b["id"] for b in resp.json()["data"]]
+    assert all(i.startswith("batch_") for i in ids)
+
+
+def test_list_batches_requires_auth(client):
+    resp = client.get("/v1/batch")
+    assert resp.status_code == 401
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _noop_process(batch_id: str, api_key: str, model: str, requests: list, store):

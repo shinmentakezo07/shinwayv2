@@ -28,9 +28,10 @@ from middleware.rate_limit import enforce_rate_limit
 router = APIRouter()
 log = structlog.get_logger()
 
-# In-memory store: file_id -> file metadata dict
+# In-memory store: file_id -> {metadata, content bytes}
 # Scoped to process lifetime — no persistence required for this use case.
 _files: dict[str, dict[str, Any]] = {}
+_file_content: dict[str, bytes] = {}  # file_id -> raw bytes for /content endpoint
 
 
 def _file_object(file_id: str, filename: str, purpose: str, size: int) -> dict[str, Any]:
@@ -53,13 +54,14 @@ async def upload_file(
     purpose: str = Form(...),
     authorization: str | None = Header(default=None),
 ):
-    """Upload a file — stores metadata in-memory."""
+    """Upload a file — stores metadata and content in-memory."""
     api_key = await verify_bearer(authorization)
     enforce_rate_limit(api_key, request=request)
     content = await file.read()
     file_id = f"file-{uuid.uuid4().hex[:24]}"
     obj = _file_object(file_id, file.filename or "upload", purpose, len(content))
     _files[file_id] = obj
+    _file_content[file_id] = content
     log.info("file_uploaded", file_id=file_id, purpose=purpose, size=len(content))
     return JSONResponse(obj)
 
@@ -96,13 +98,37 @@ async def get_file(
     return JSONResponse(obj)
 
 
+@router.get("/v1/files/{file_id}/content")
+async def get_file_content(
+    file_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Return the raw bytes of an uploaded file."""
+    from fastapi.responses import Response
+    api_key = await verify_bearer(authorization)
+    enforce_rate_limit(api_key, request=request)
+    if file_id not in _files:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"File '{file_id}' not found", "type": "not_found_error", "code": "404"}},
+        )
+    content = _file_content.get(file_id, b"")
+    filename = _files[file_id].get("filename", "file")
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.delete("/v1/files/{file_id}")
 async def delete_file(
     file_id: str,
     request: Request,
     authorization: str | None = Header(default=None),
 ):
-    """Delete a file record."""
+    """Delete a file record and its stored content."""
     api_key = await verify_bearer(authorization)
     enforce_rate_limit(api_key, request=request)
     if file_id not in _files:
@@ -111,5 +137,6 @@ async def delete_file(
             content={"error": {"message": f"File '{file_id}' not found", "type": "not_found_error", "code": "404"}},
         )
     del _files[file_id]
+    _file_content.pop(file_id, None)
     log.info("file_deleted", file_id=file_id)
     return JSONResponse({"id": file_id, "object": "file", "deleted": True})

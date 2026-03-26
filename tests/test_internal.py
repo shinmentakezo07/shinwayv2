@@ -8,7 +8,8 @@ from app import create_app
 
 @pytest.fixture
 def client():
-    return TestClient(create_app())
+    with TestClient(create_app()) as c:
+        yield c
 
 
 @pytest.fixture
@@ -176,3 +177,64 @@ def test_missing_auth_returns_401():
     unauthenticated_client = TestClient(create_app())
     response = unauthenticated_client.get("/v1/internal/stats")
     assert response.status_code == 401
+
+
+# ── Quota endpoint tests ──────────────────────────────────────────────────────
+
+def test_quota_status_returns_structure(client, auth_headers, bypass_internal_auth):
+    """GET /v1/internal/quota/{key} returns expected fields."""
+    resp = client.get("/v1/internal/quota/test-key", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "key" in body
+    assert "token_limit_daily" in body
+    assert "tokens_used_24h" in body
+    assert "quota_enabled" in body
+    assert "at_limit" in body
+    assert body["key"] == "test-key"
+
+
+def test_quota_status_key_not_found_returns_zero_limit(client, auth_headers, bypass_internal_auth):
+    """A key with no DB record returns token_limit_daily=0."""
+    resp = client.get("/v1/internal/quota/sk-nobody", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["token_limit_daily"] == 0
+    assert body["tokens_remaining"] is None
+    assert body["at_limit"] is False
+
+
+def test_quota_reset_when_disabled_returns_422(client, auth_headers, bypass_internal_auth):
+    """POST /v1/internal/quota/{key}/reset returns 422 when quota_enabled=false."""
+    resp = client.post("/v1/internal/quota/test-key/reset", headers=auth_headers)
+    # quota_enabled defaults to False in test env — should get 422
+    assert resp.status_code == 422
+
+
+# ── Admin webhook endpoint tests ──────────────────────────────────────────────
+
+def test_admin_list_webhooks_returns_list(client, auth_headers, bypass_internal_auth):
+    """GET /v1/admin/webhooks returns list structure."""
+    resp = client.get("/v1/admin/webhooks", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["object"] == "list"
+    assert isinstance(body["data"], list)
+    assert "count" in body
+
+
+def test_admin_list_files_returns_list(client, auth_headers, bypass_internal_auth):
+    """GET /v1/admin/files returns list structure."""
+    resp = client.get("/v1/admin/files", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["object"] == "list"
+    assert isinstance(body["data"], list)
+    assert "count" in body
+
+
+def test_admin_endpoints_require_auth(client):
+    """Admin endpoints return 401 without auth."""
+    assert client.get("/v1/admin/webhooks").status_code == 401
+    assert client.get("/v1/admin/files").status_code == 401
+    assert client.get("/v1/internal/quota/sk-test").status_code == 401

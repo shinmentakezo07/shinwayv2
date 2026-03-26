@@ -208,6 +208,25 @@ async def create_batch(
     return JSONResponse(record)
 
 
+# ── GET /v1/batch ────────────────────────────────────────────────────────────
+
+@router.get("/v1/batch")
+async def list_batches(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    """List all batches owned by the authenticated key, newest first."""
+    api_key = await verify_bearer(authorization)
+    enforce_rate_limit(api_key, request=request)
+
+    records = await batch_store.list_by_key(api_key)
+    return JSONResponse({
+        "object": "list",
+        "data": records,
+        "count": len(records),
+    })
+
+
 # ── GET /v1/batch/{batch_id} ──────────────────────────────────────────────────
 
 @router.get("/v1/batch/{batch_id}")
