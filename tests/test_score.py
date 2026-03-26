@@ -27,9 +27,16 @@ def test_confidence_zero_no_calls():
     assert score_tool_call_confidence("anything", []) == 0.0
 
 def test_confidence_low_for_example_text():
+    # marker present but "for example" subtracts 0.2 — score should be suppressed
     text = "For example, you could call: [assistant_tool_calls]\n{}"
     score = score_tool_call_confidence(text, [_call()])
-    assert score < 0.9
+    assert score < 0.6
+
+
+def test_find_marker_pos_with_leading_whitespace():
+    # regex allows ^[ \t]* before the marker
+    text = "\t[assistant_tool_calls]\n{}"
+    assert _find_marker_pos(text) >= 0
 
 def test_confidence_clamped_0_to_1():
     text = "[assistant_tool_calls]\n{\"tool_calls\": []}"
