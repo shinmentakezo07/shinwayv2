@@ -4865,3 +4865,28 @@ Phase 3 reliability and observability: silent failures made invisible, missing m
 | SHA | Description |
 |-----|-------------|
 | `fbb947fd` | feat(tools): wire inc_tool_repair + inc_schema_validation; deduplicate after repair; tests for normalize_tool_result_messages; remove _normalize_name duplicate from parse.py |
+
+---
+
+## Session 148 — tools/ Phase 4 Chunk 2: repair.py extracted from parse.py (2026-03-26)
+
+### What changed
+- `tools/repair.py` — created: `repair_tool_call` moved here from `tools/parse.py`
+- `tests/test_repair.py` — created: 6 unit tests covering no-op, alias repair, type coercion, unknown tool, unknown param drop, id preservation
+- `tools/parse.py` — removed `repair_tool_call` body (138 lines); added `from tools.repair import repair_tool_call  # noqa: F401` re-export for backward compat; line count 469 → 334
+- `tools/budget.py` — updated import: `from tools.parse import repair_tool_call` → `from tools.repair import repair_tool_call`
+
+### Which lines / functions
+- `tools/repair.py:repair_tool_call` — full implementation (fuzzy param matching, type coercion, required param fill, unknown param drop); module-level `log = structlog.get_logger()`
+- `tools/parse.py` — re-export block (line ~41): added `from tools.repair import repair_tool_call  # noqa: F401`; deleted body at former lines 154-288
+- `tools/budget.py:repair_invalid_calls` — import source changed from `tools.parse` to `tools.repair` (direct, no indirection)
+- `tests/test_repair.py` — `test_no_repair_needed`, `test_alias_param_repaired`, `test_type_coercion_int_to_string`, `test_unknown_tool_returns_original`, `test_unknown_param_dropped`, `test_id_preserved`
+
+### Why
+Phase 4 Chunk 2 of tools/ decomposition. `repair_tool_call` was a 138-line function inside `parse.py` with no logical dependency on parsing. Extracting it to `tools/repair.py` gives it a focused home, keeps `parse.py` under 340 lines, and allows `tools/budget.py` to import directly without going through the parser module.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `23a2f7f9` | feat(tools): add repair.py — repair_tool_call extracted from parse.py (copy step) |
+| `f462ff5f` | refactor(tools): parse.py imports repair_tool_call from tools/repair; budget.py imports direct |
