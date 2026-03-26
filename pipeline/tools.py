@@ -18,11 +18,6 @@ from tools.parse import (
     validate_tool_call,
 )
 
-# budget.py extracted — re-exported here for pipeline/__init__.py backward compat
-from tools.budget import limit_tool_calls as _limit_tool_calls  # noqa: F401
-from tools.budget import repair_invalid_calls as _repair_invalid_calls  # noqa: F401
-
-
 log = structlog.get_logger()
 
 
@@ -116,6 +111,13 @@ def _repair_invalid_calls(
             )
             out.append(call)  # pass through — errors are non-fatal
     return out
+
+
+# budget.py extracted — re-exported here for pipeline/__init__.py backward compat
+# IMPORTANT: these must appear AFTER the def bodies above so they overwrite
+# the local definitions and the module-level names resolve to tools.budget.
+from tools.budget import limit_tool_calls as _limit_tool_calls  # noqa: F401
+from tools.budget import repair_invalid_calls as _repair_invalid_calls  # noqa: F401
 
 
 def _parse_score_repair(
