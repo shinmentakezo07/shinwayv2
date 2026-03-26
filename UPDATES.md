@@ -4844,3 +4844,24 @@ Phase 3 reliability and observability: silent failures made invisible, missing m
 | `e14bc025` | fix(tools): emitter.py logs parse_tool_arguments failures |
 | `80cc5cf9` | fix(tools): registry.py emits tool_name_normalization_collision warning |
 | `cdc47345` | feat(tools): add deduplicate_tool_calls to budget.py |
+
+---
+
+## Session 147 — tools/ wire metrics + dedup + normalize tests (2026-03-26)
+
+### What changed
+
+- `tools/budget.py:repair_invalid_calls` — wired `inc_tool_repair("passed"/"repaired"/"dropped"/"passed_through")` into all 4 outcome cases
+- `tools/validate.py:validate_tool_call_full` — wired `inc_schema_validation("passed"/"failed")` after schema check
+- `pipeline/stream_openai.py` — added `_deduplicate_tool_calls` import; calls it after `_repair_invalid_calls` on final_calls
+- `pipeline/stream_anthropic.py` — same
+- `tools/parse.py:_normalize_name` — removed duplicate definition; now imports from `tools.results` (single source of truth)
+- `tests/test_normalize_result_messages.py` — 11 new tests covering all paths of `normalize_tool_result_messages`
+
+### Why
+`inc_tool_repair` and `inc_schema_validation` were no-op stubs with no callers — now wired. `deduplicate_tool_calls` existed but was never called in production. `_normalize_name` was defined twice. `normalize_tool_result_messages` had zero dedicated tests.
+
+### Commit SHA
+| SHA | Description |
+|-----|-------------|
+| `fbb947fd` | feat(tools): wire inc_tool_repair + inc_schema_validation; deduplicate after repair; tests for normalize_tool_result_messages; remove _normalize_name duplicate from parse.py |
