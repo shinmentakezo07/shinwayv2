@@ -4987,3 +4987,46 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 |---|---|
 | `a0c2d124` | fix(deps): add python-multipart |
 | `cf4b07d2` | feat(routers): fill missing API surface gaps |
+
+## Session 152 — Router enhancements: 10 additions (2026-03-26)
+
+### What changed
+- `routers/internal.py` — added 5 new endpoints: `GET /v1/internal/cache/stats`, `GET /v1/internal/fallback/status`, `GET /v1/internal/keys/{key}/usage` (unified analytics+quota), `POST /v1/internal/keys/{key}/rotate` (atomic key rotation), `GET /health/deep`
+- `routers/token_count.py` — created: `POST /v1/chat/count_tokens` — OpenAI-format token counting via litellm
+- `routers/export.py` — created: `GET /v1/internal/export/logs` — NDJSON or CSV export of analytics log
+- `routers/webhooks.py` — added `PATCH /v1/internal/webhooks/{id}` + `UpdateWebhookBody`
+- `storage/webhooks.py` — added `WebhookStore.update()` method
+- `routers/batch.py` — `GET /v1/batch` now supports `limit` + `after` cursor pagination
+- `routers/files.py` — `GET /v1/files` now supports `?purpose=` filter
+- `app.py` — registered `token_count_router` and `export_router`
+- `tests/test_internal.py` — 9 new tests (cache stats, fallback, unified usage, key rotate, deep health)
+- `tests/test_files_router.py` — 1 new test (purpose filter)
+- `tests/test_webhooks_router.py` — 3 new tests (PATCH webhook); fixed env contamination with monkeypatch key pinning
+- `tests/test_token_count_router.py` — created: 3 tests
+- `tests/test_export_router.py` — created: 4 tests
+
+### Which lines / functions
+- `routers/internal.py:cache_stats`, `fallback_status`, `key_usage_unified`, `rotate_key`, `deep_health` — appended after `credential_add`
+- `routers/token_count.py:count_tokens_openai` — new router
+- `routers/export.py:export_logs` — new router
+- `routers/webhooks.py:update_webhook`, `UpdateWebhookBody` — appended after `delete_webhook`
+- `storage/webhooks.py:WebhookStore.update` — inserted before `delete`
+- `routers/batch.py:list_batches` — added `limit`, `after` Query params; cursor pagination logic
+- `routers/files.py:list_files` — added `purpose` Query param; filter logic
+
+### Why
+- Cache stats: operators need to see L1 hit count and L2 availability without Prometheus
+- Fallback status: no way to verify SHINWAY_FALLBACK_CHAIN took effect at runtime
+- Unified key usage: split across two endpoints previously — combined for admin UI
+- Key rotate: security best practice — needed for credential rotation without downtime
+- Token count (OpenAI): Anthropic had it; OpenAI clients needed the equivalent
+- Export: analytics ring buffer useful as CSV/NDJSON feed for external dashboards
+- PATCH webhook: no update path existed — only create/delete
+- Batch pagination: unlimited list response unsafe at scale
+- Files purpose filter: OpenAI SDK uses ?purpose= to scope file listings
+- Deep health: /health/ready only checked credentials — deep check verifies all stores
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| `0fdd6f86` | feat(routers): 10 enhancements |
