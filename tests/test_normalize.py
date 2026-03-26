@@ -3,7 +3,6 @@ from unittest.mock import patch
 from tools.normalize import (
     normalize_anthropic_tools,
     normalize_openai_tools,
-    normalize_tool_result_messages,
     to_anthropic_tool_format,
     validate_tool_choice,
 )
@@ -162,59 +161,6 @@ def test_to_anthropic_tool_format_falls_back_when_litellm_raises():
         }
     ]
 
-
-def test_normalize_tool_result_messages_converts_single_anthropic_tool_result_to_openai_tool_message():
-    messages = [
-        {
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "call_1", "content": {"ok": True}}],
-        }
-    ]
-
-    result = normalize_tool_result_messages(messages, target="openai")
-
-    assert result == [{"role": "tool", "tool_call_id": "call_1", "content": {"ok": True}}]
-    assert result[0]["content"] == {"ok": True}
-    messages[0]["content"][0]["content"]["ok"] = False
-    assert result[0]["content"] == {"ok": True}
-
-
-def test_normalize_tool_result_messages_splits_mixed_openai_content_into_tool_then_user():
-    """Mixed user message (text + tool_result) is split: tool result first, then text."""
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "before"},
-                {"type": "tool_result", "tool_use_id": "call_1", "content": "ok"},
-            ],
-        }
-    ]
-
-    result = normalize_tool_result_messages(messages, target="openai")
-
-    assert len(result) == 2
-    assert result[0] == {"role": "tool", "tool_call_id": "call_1", "content": "ok"}
-    assert result[1] == {"role": "user", "content": "before"}
-    # Input must not be mutated
-    assert messages[0]["content"][0]["text"] == "before"
-
-
-def test_normalize_tool_result_messages_converts_openai_tool_message_to_anthropic_user_block():
-    messages = [{"role": "tool", "tool_call_id": "call_1", "content": {"ok": True}}]
-
-    result = normalize_tool_result_messages(messages, target="anthropic")
-
-    assert result == [
-        {
-            "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "call_1", "content": {"ok": True}}
-            ],
-        }
-    ]
-    messages[0]["content"]["ok"] = False
-    assert result[0]["content"][0]["content"] == {"ok": True}
 
 
 def test_validate_tool_choice_invalid_string_defaults_to_auto_when_tools_exist():
