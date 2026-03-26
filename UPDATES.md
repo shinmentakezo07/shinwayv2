@@ -4919,3 +4919,43 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | `f462ff5f` | refactor(tools): parse.py imports repair_tool_call from tools/repair |
 | `4affc3c9` | feat(tools): add confidence.py |
 | `ab1f708a` | feat(tools): wire CONFIDENCE_THRESHOLD into parse.py |
+
+## Session 150 — New Router Modules: embeddings, audio, fine_tuning, files, usage, webhooks (2026-03-26)
+
+### What changed
+- `routers/embeddings.py` — created: `POST /v1/embeddings` clean 501; replaces inline stub in `routers/openai.py`
+- `routers/audio.py` — created: `POST /v1/audio/transcriptions`, `/speech`, `/translations` — 501 stubs
+- `routers/fine_tuning.py` — created: `POST/GET /v1/fine_tuning/jobs`, `GET /v1/fine_tuning/jobs/{id}`, `POST /v1/fine_tuning/jobs/{id}/cancel` — 501 stubs
+- `routers/files.py` — created: `POST/GET/DELETE /v1/files`, `GET /v1/files/{id}` — in-memory metadata store
+- `routers/usage.py` — created: `GET /v1/usage/daily`, `/keys/{key}`, `/summary` — reads from `AnalyticsStore` singleton
+- `routers/webhooks.py` — created: `POST/GET/DELETE /v1/internal/webhooks`, `GET /v1/internal/webhooks/{id}` — SQLite-backed, HTTPS-only
+- `storage/webhooks.py` — created: `WebhookStore` aiosqlite WAL store for webhook registrations
+- `app.py:_lifespan` — init/close `webhook_store`; `create_app()` registers all 6 new routers
+- `routers/openai.py` — removed duplicate `/v1/embeddings` stub (now owned by `routers/embeddings.py`)
+- `docs/superpowers/plans/2026-03-26-new-router-modules.md` — created: full implementation plan
+- `tests/test_embeddings_router.py` — created: 2 tests
+- `tests/test_audio_router.py` — created: 4 tests
+- `tests/test_fine_tuning_router.py` — created: 5 tests
+- `tests/test_files_router.py` — created: 7 tests
+- `tests/test_usage_router.py` — created: 6 tests
+- `tests/test_webhooks_router.py` — created: 8 tests
+
+### Which lines / functions
+- `app.py:_lifespan` lines 76-94 — webhook_store init/close
+- `app.py:create_app` lines 256-273 — 6 new router imports and includes
+- `routers/openai.py` lines 286-299 — removed embeddings stub
+- `routers/files.py:_files` — module-level dict, process-lifetime in-memory store
+- `routers/usage.py:_day_bucket` — groups rolling log entries by UTC calendar day
+- `storage/webhooks.py:WebhookStore` — aiosqlite CRUD: create, list_by_key, get, delete
+- `routers/webhooks.py:create_webhook` — validates HTTPS-only URL before persisting
+
+### Why
+- Completes the OpenAI API surface: clients using LangChain, LlamaIndex, and OpenAI SDKs probe these endpoints; returning clean 501s is better than connection errors
+- `/v1/files` satisfies SDKs that call upload before batch jobs
+- `/v1/usage/*` surfaces the existing analytics data through a proper HTTP API
+- `/v1/internal/webhooks` enables async event notification registration for batch completions
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| `18106f49` | feat(routers): add embeddings, audio, fine_tuning, files, usage, webhooks routers |
