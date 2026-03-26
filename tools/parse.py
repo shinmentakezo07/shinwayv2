@@ -33,6 +33,7 @@ from tools.score import (  # noqa: F401
     _find_marker_pos,
     score_tool_call_confidence,
 )
+from tools.confidence import CONFIDENCE_THRESHOLD  # noqa: F401
 from tools.streaming import StreamingToolCallParser  # noqa: F401
 from tools.results import _build_tool_call_results  # noqa: F401
 
@@ -460,7 +461,7 @@ def parse_tool_calls_from_text(
     # Confidence gate — drop accidental JSON that happens to look like a tool call.
     # Applied here so it covers both streaming and non-streaming paths uniformly.
     conf = score_tool_call_confidence(text, out)
-    if conf < 0.3:
+    if conf < CONFIDENCE_THRESHOLD:
         log.debug("tool_parse_low_confidence_dropped", score=conf)
         inc_parse_outcome("low_confidence_dropped")
         return None
