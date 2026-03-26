@@ -259,6 +259,8 @@ def create_app() -> FastAPI:
     from routers.files import router as files_router
     from routers.usage import router as usage_router
     from routers.webhooks import router as webhooks_router
+    from routers.token_count import router as token_count_router
+    from routers.export import router as export_router
 
     app.include_router(internal_router)
     app.include_router(openai_router)
@@ -271,6 +273,8 @@ def create_app() -> FastAPI:
     app.include_router(files_router)
     app.include_router(usage_router)
     app.include_router(webhooks_router)
+    app.include_router(token_count_router)
+    app.include_router(export_router)
 
     # ── Prometheus metrics ──────────────────────────────────────────────
     if settings.metrics_enabled:

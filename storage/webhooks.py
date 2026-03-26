@@ -111,6 +111,36 @@ class WebhookStore:
             row = await cur.fetchone()
         return _to_record(row) if row else None
 
+    async def update(
+        self,
+        webhook_id: str,
+        api_key: str,
+        url: str | None = None,
+        events: list[str] | None = None,
+        is_active: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Update a webhook registration. Returns updated record or None if not found."""
+        self._assert_init()
+        fields, values = [], []
+        if url is not None:
+            fields.append("url = ?")
+            values.append(url)
+        if events is not None:
+            fields.append("events = ?")
+            values.append(json.dumps(events))
+        if is_active is not None:
+            fields.append("is_active = ?")
+            values.append(int(is_active))
+        if not fields:
+            return await self.get(webhook_id, api_key)
+        values.extend([webhook_id, api_key])
+        await self._db.execute(  # type: ignore[union-attr]
+            f"UPDATE webhooks SET {', '.join(fields)} WHERE id = ? AND api_key = ?",
+            values,
+        )
+        await self._db.commit()  # type: ignore[union-attr]
+        return await self.get(webhook_id, api_key)
+
     async def delete(self, webhook_id: str, api_key: str) -> bool:
         self._assert_init()
         cur = await self._db.execute(  # type: ignore[union-attr]

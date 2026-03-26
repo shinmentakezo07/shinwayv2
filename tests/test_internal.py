@@ -238,3 +238,82 @@ def test_admin_endpoints_require_auth(client):
     assert client.get("/v1/admin/webhooks").status_code == 401
     assert client.get("/v1/admin/files").status_code == 401
     assert client.get("/v1/internal/quota/sk-test").status_code == 401
+
+
+# ── Cache stats ───────────────────────────────────────────────────────────────
+
+def test_cache_stats_returns_structure(client, auth_headers, bypass_internal_auth):
+    resp = client.get("/v1/internal/cache/stats", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "l1_currsize" in body
+    assert "l1_maxsize" in body
+    assert "l1_ttl_seconds" in body
+    assert "l2_enabled" in body
+    assert "l2_available" in body
+    assert "cache_enabled" in body
+
+
+# ── Fallback status ───────────────────────────────────────────────────────────
+
+def test_fallback_status_returns_chain(client, auth_headers, bypass_internal_auth):
+    resp = client.get("/v1/internal/fallback/status", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "fallback_enabled" in body
+    assert "chain" in body
+    assert isinstance(body["chain"], dict)
+
+
+# ── Unified key usage ─────────────────────────────────────────────────────────
+
+def test_key_usage_unified_returns_all_fields(client, auth_headers, bypass_internal_auth):
+    resp = client.get("/v1/internal/keys/test-key/usage", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["key"] == "test-key"
+    assert "requests" in body
+    assert "estimated_cost_usd" in body
+    assert "tokens_used_24h" in body
+    assert "token_limit_daily" in body
+    assert "last_request_ts" in body
+    assert "tokens_remaining_today" in body
+
+
+# ── Key rotation ──────────────────────────────────────────────────────────────
+
+def test_key_rotate_not_found_returns_404(client, auth_headers, bypass_internal_auth):
+    resp = client.post("/v1/internal/keys/wiwi-notexist/rotate", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+def test_key_rotate_creates_new_and_deactivates_old(client, auth_headers, bypass_internal_auth):
+    # Create a key first
+    create = client.post(
+        "/v1/admin/keys",
+        json={"label": "rotate-me"},
+        headers=auth_headers,
+    )
+    assert create.status_code == 200
+    old_key = create.json()["key"]
+
+    rotate = client.post(f"/v1/internal/keys/{old_key}/rotate", headers=auth_headers)
+    assert rotate.status_code == 200
+    body = rotate.json()
+    assert body["ok"] is True
+    assert body["old_key"] == old_key
+    assert body["new_key"] != old_key
+    assert body["new_key"].startswith("wiwi-")
+    assert body["old_key_deactivated"] is True
+
+
+# ── Deep health ───────────────────────────────────────────────────────────────
+
+def test_deep_health_returns_checks(client):
+    resp = client.get("/health/deep")
+    assert resp.status_code in (200, 503)  # 503 if credentials not configured
+    body = resp.json()
+    assert "status" in body
+    assert "checks" in body
+    assert "key_store" in body["checks"]
+    assert "batch_store" in body["checks"]

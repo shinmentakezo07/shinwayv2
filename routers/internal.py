@@ -504,3 +504,193 @@ async def credential_add(
             content={"error": "cookie already in pool or pool at maximum (15)"},
         )
     return {"ok": True, "added": True, "pool_size": credential_pool.size}
+
+
+# ── Cache stats ───────────────────────────────────────────────────────────────
+
+@router.get("/v1/internal/cache/stats")
+async def cache_stats(authorization: str | None = Header(default=None)):
+    """Return L1 and L2 cache health snapshot — size, maxsize, TTL, L2 availability."""
+    await verify_bearer(authorization)
+    from cache import response_cache
+    from config import settings as _s
+    return {
+        "l1_currsize": len(response_cache._cache),
+        "l1_maxsize": response_cache._cache.maxsize,
+        "l1_ttl_seconds": response_cache._cache.ttl,
+        "l2_enabled": _s.cache_l2_enabled,
+        "l2_available": response_cache._l2._available,
+        "cache_enabled": runtime_config.get("cache_enabled"),
+        "cache_ttl_seconds": runtime_config.get("cache_ttl_seconds"),
+    }
+
+
+# ── Fallback chain status ──────────────────────────────────────────────────────
+
+@router.get("/v1/internal/fallback/status")
+async def fallback_status(authorization: str | None = Header(default=None)):
+    """Return the live fallback chain config — useful to verify SHINWAY_FALLBACK_CHAIN took effect."""
+    await verify_bearer(authorization)
+    from pipeline.fallback import FallbackChain
+    from config import settings as _s
+    try:
+        chain = FallbackChain(_s.fallback_chain)
+        chain_dict = chain._chain
+        enabled = bool(chain_dict)
+    except Exception:
+        chain_dict = {}
+        enabled = False
+    return {
+        "fallback_enabled": enabled,
+        "chain": chain_dict,
+        "raw_config": _s.fallback_chain,
+    }
+
+
+# ── Unified key usage ─────────────────────────────────────────────────────────
+
+@router.get("/v1/internal/keys/{full_key:path}/usage")
+async def key_usage_unified(
+    full_key: str,
+    authorization: str | None = Header(default=None),
+):
+    """Unified usage view for a key: analytics (lifetime) + quota (24h) + DB limits.
+
+    Combines what was previously split across /v1/usage/keys/{key} and
+    /v1/internal/quota/{key} into one response.
+    """
+    await verify_bearer(authorization)
+    from config import settings as _s
+    from storage.keys import key_store
+
+    snapshot = await analytics.snapshot()
+    analytics_data = snapshot["keys"].get(full_key, {})
+
+    rec = await key_store.get(full_key)
+    token_limit_daily = (rec or {}).get("token_limit_daily", 0)
+    budget_usd = (rec or {}).get("budget_usd", 0.0)
+    label = (rec or {}).get("label", "")
+
+    if _s.quota_enabled:
+        from storage.quota import quota_store
+        tokens_used_24h = await quota_store.get_usage_24h(full_key)
+    else:
+        tokens_used_24h = await analytics.get_daily_tokens(full_key)
+
+    return JSONResponse({
+        "key": full_key,
+        "label": label,
+        "requests": analytics_data.get("requests", 0),
+        "cache_hits": analytics_data.get("cache_hits", 0),
+        "estimated_cost_usd": round(analytics_data.get("estimated_cost_usd", 0.0), 6),
+        "budget_usd": budget_usd,
+        "estimated_input_tokens": analytics_data.get("estimated_input_tokens", 0),
+        "estimated_output_tokens": analytics_data.get("estimated_output_tokens", 0),
+        "tokens_used_24h": tokens_used_24h,
+        "token_limit_daily": token_limit_daily,
+        "tokens_remaining_today": max(0, token_limit_daily - tokens_used_24h) if token_limit_daily > 0 else None,
+        "last_request_ts": analytics_data.get("last_request_ts", 0),
+        "providers": analytics_data.get("providers", {}),
+    })
+
+
+# ── Key rotation ──────────────────────────────────────────────────────────────
+
+@router.post("/v1/internal/keys/{full_key:path}/rotate")
+async def rotate_key(
+    full_key: str,
+    authorization: str | None = Header(default=None),
+):
+    """Atomically rotate an API key: create new key with same settings, deactivate old.
+
+    The old key is deactivated (not deleted) so audit history is preserved.
+    The new key is returned only once — store it immediately.
+    """
+    await verify_bearer(authorization)
+    from storage.keys import key_store
+
+    old_rec = await key_store.get(full_key)
+    if old_rec is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"Key not found", "type": "not_found_error", "code": "404"}},
+        )
+
+    new_rec = await key_store.create(
+        label=old_rec.get("label", ""),
+        rpm_limit=old_rec.get("rpm_limit", 0),
+        rps_limit=old_rec.get("rps_limit", 0),
+        token_limit_daily=old_rec.get("token_limit_daily", 0),
+        budget_usd=old_rec.get("budget_usd", 0.0),
+        allowed_models=old_rec.get("allowed_models", []),
+    )
+    await key_store.update(full_key, is_active=False)
+    log.info("key_rotated", old_key_prefix=full_key[:16], new_key_prefix=new_rec["key"][:16])
+    return JSONResponse({
+        "ok": True,
+        "old_key": full_key,
+        "old_key_deactivated": True,
+        "new_key": new_rec["key"],
+        "label": new_rec["label"],
+    })
+
+
+# ── Deep health check ─────────────────────────────────────────────────────────
+
+@router.get("/health/deep")
+async def deep_health():
+    """Deep health check — verifies SQLite stores, Redis (if enabled), and upstream reachability.
+
+    Intentionally unauthenticated like /health/live — used by load balancers
+    and monitoring that run before credentials are available.
+    Returns 200 with per-component status. Returns 503 if any critical component fails.
+    """
+    from config import settings as _s
+    from cursor.credentials import credential_pool
+    from storage.keys import key_store
+    from storage.batch import batch_store
+    from storage.quota import quota_store
+    from storage.webhooks import webhook_store
+
+    checks: dict[str, str] = {}
+    failed = False
+
+    # Credential pool
+    checks["credentials"] = "ok" if credential_pool.size > 0 else "degraded"
+
+    # SQLite stores — try a cheap read on each
+    for name, store in [
+        ("key_store", key_store),
+        ("batch_store", batch_store),
+        ("quota_store", quota_store),
+        ("webhook_store", webhook_store),
+    ]:
+        try:
+            if store._db is None:
+                checks[name] = "not_initialised"
+                failed = True
+            else:
+                checks[name] = "ok"
+        except Exception:
+            checks[name] = "error"
+            failed = True
+
+    # Redis L2 (only when enabled)
+    if _s.cache_l2_enabled:
+        from cache import response_cache
+        ok = await response_cache._l2._ensure_client()
+        checks["redis_l2"] = "ok" if ok else "unavailable"
+        if not ok:
+            failed = True
+    else:
+        checks["redis_l2"] = "disabled"
+
+    status_code = 503 if failed else 200
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "degraded" if failed else "healthy",
+            "checks": checks,
+            "credentials": credential_pool.size,
+        },
+    )

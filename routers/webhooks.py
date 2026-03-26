@@ -38,6 +38,12 @@ class CreateWebhookBody(BaseModel):
     events: list[str] = []
 
 
+class UpdateWebhookBody(BaseModel):
+    url: str | None = None
+    events: list[str] | None = None
+    is_active: bool | None = None
+
+
 @router.post("/v1/internal/webhooks")
 async def create_webhook(
     body: CreateWebhookBody,
@@ -129,3 +135,40 @@ async def delete_webhook(
         )
     log.info("webhook_deleted", webhook_id=webhook_id)
     return JSONResponse({"id": webhook_id, "object": "webhook", "deleted": True})
+
+
+@router.patch("/v1/internal/webhooks/{webhook_id}")
+async def update_webhook(
+    webhook_id: str,
+    body: UpdateWebhookBody,
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Update a webhook's URL, events list, or active status."""
+    api_key = await verify_bearer(authorization)
+    enforce_rate_limit(api_key, request=request)
+
+    if body.url is not None and not body.url.startswith("https://"):
+        return JSONResponse(
+            status_code=422,
+            content={"error": {"message": "Webhook URL must use HTTPS.", "type": "invalid_request_error", "code": "422"}},
+        )
+
+    if body.events is not None:
+        unknown = [e for e in body.events if e not in _VALID_EVENTS]
+        if unknown:
+            log.warning("webhook_update_unknown_events", unknown=unknown)
+
+    record = await webhook_store.update(
+        webhook_id, api_key,
+        url=body.url,
+        events=body.events,
+        is_active=body.is_active,
+    )
+    if record is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"Webhook '{webhook_id}' not found", "type": "not_found_error", "code": "404"}},
+        )
+    log.info("webhook_updated", webhook_id=webhook_id)
+    return JSONResponse(record)

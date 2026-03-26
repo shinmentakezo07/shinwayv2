@@ -13,7 +13,7 @@ import json as _json
 import uuid
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Header, Request
+from fastapi import APIRouter, BackgroundTasks, Header, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from handlers import RequestValidationError
@@ -213,17 +213,37 @@ async def create_batch(
 @router.get("/v1/batch")
 async def list_batches(
     request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    after: str | None = Query(default=None),
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
-    """List all batches owned by the authenticated key, newest first."""
+    """List batches owned by the authenticated key, newest first.
+
+    Supports cursor-based pagination via `after` (a batch ID).
+    `limit` controls page size (1-100, default 20).
+    """
     api_key = await verify_bearer(authorization)
     enforce_rate_limit(api_key, request=request)
 
-    records = await batch_store.list_by_key(api_key)
+    all_records = await batch_store.list_by_key(api_key)
+
+    # Cursor pagination: skip records until we find `after`, then take the next `limit`
+    if after:
+        try:
+            after_idx = next(i for i, r in enumerate(all_records) if r["id"] == after)
+            all_records = all_records[after_idx + 1:]
+        except StopIteration:
+            all_records = []
+
+    page = all_records[:limit]
+    has_more = len(all_records) > limit
+
     return JSONResponse({
         "object": "list",
-        "data": records,
-        "count": len(records),
+        "data": page,
+        "count": len(page),
+        "has_more": has_more,
+        "last_id": page[-1]["id"] if page else None,
     })
 
 

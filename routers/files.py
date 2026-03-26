@@ -19,7 +19,7 @@ import uuid
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Form, Header, Request, UploadFile
+from fastapi import APIRouter, Form, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from middleware.auth import verify_bearer
@@ -69,14 +69,18 @@ async def upload_file(
 @router.get("/v1/files")
 async def list_files(
     request: Request,
+    purpose: str | None = Query(default=None),
     authorization: str | None = Header(default=None),
 ):
-    """List all uploaded files."""
+    """List uploaded files. Optional `purpose` filter (e.g. 'batch', 'assistants')."""
     api_key = await verify_bearer(authorization)
     enforce_rate_limit(api_key, request=request)
+    files = list(_files.values())
+    if purpose is not None:
+        files = [f for f in files if f.get("purpose") == purpose]
     return JSONResponse({
         "object": "list",
-        "data": list(_files.values()),
+        "data": files,
     })
 
 

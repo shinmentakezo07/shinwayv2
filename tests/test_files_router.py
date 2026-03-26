@@ -126,6 +126,26 @@ def test_get_content_missing_file_returns_404(client):
     assert resp.status_code == 404
 
 
+def test_list_files_with_purpose_filter(client):
+    client.post(
+        "/v1/files",
+        data={"purpose": "batch"},
+        files={"file": ("b.jsonl", b'{}\n', "application/jsonl")},
+        headers={"Authorization": f"Bearer {_TEST_KEY}"},
+    )
+    client.post(
+        "/v1/files",
+        data={"purpose": "assistants"},
+        files={"file": ("a.jsonl", b'{}\n', "application/jsonl")},
+        headers={"Authorization": f"Bearer {_TEST_KEY}"},
+    )
+    resp = client.get("/v1/files?purpose=batch", headers={"Authorization": f"Bearer {_TEST_KEY}"})
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data) == 1
+    assert data[0]["purpose"] == "batch"
+
+
 def test_delete_removes_content_too(client):
     up = client.post(
         "/v1/files",
