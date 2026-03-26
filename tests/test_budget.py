@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from tools.budget import limit_tool_calls, repair_invalid_calls
+from tools.budget import limit_tool_calls, repair_invalid_calls, deduplicate_tool_calls
 
 
 def _tool(name: str, **props) -> dict:
@@ -76,3 +76,32 @@ def test_repair_multiple_calls():
     calls = [_call("Bash", command="ls"), _call("Bash", command="pwd")]
     result = repair_invalid_calls(calls, tools)
     assert len(result) == 2
+
+
+def test_dedup_no_duplicates_unchanged():
+    c1 = {"id": "call_1", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "ls"}'}}
+    c2 = {"id": "call_2", "type": "function", "function": {"name": "Write", "arguments": '{"file_path": "/f"}'}}
+    assert len(deduplicate_tool_calls([c1, c2])) == 2
+
+
+def test_dedup_removes_identical_signature():
+    c1 = {"id": "call_1", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "ls"}'}}
+    c2 = {"id": "call_2", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "ls"}'}}
+    result = deduplicate_tool_calls([c1, c2])
+    assert len(result) == 1
+    assert result[0]["id"] == "call_1"
+
+
+def test_dedup_different_args_not_deduped():
+    c1 = {"id": "call_1", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "ls"}'}}
+    c2 = {"id": "call_2", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "pwd"}'}}
+    assert len(deduplicate_tool_calls([c1, c2])) == 2
+
+
+def test_dedup_empty_list():
+    assert deduplicate_tool_calls([]) == []
+
+
+def test_dedup_single_call_unchanged():
+    c = {"id": "call_1", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "ls"}'}}
+    assert deduplicate_tool_calls([c]) == [c]

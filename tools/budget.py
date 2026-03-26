@@ -64,3 +64,19 @@ def repair_invalid_calls(
             )
             out.append(call)  # case 4: pass through — non-fatal
     return out
+
+
+def deduplicate_tool_calls(calls: list[dict]) -> list[dict]:
+    """Remove duplicate tool calls by (name, arguments) signature.
+
+    Preserves the first occurrence. Does not mutate the input list.
+    """
+    seen: set[str] = set()
+    out: list[dict] = []
+    for call in calls:
+        fn = call.get("function", {})
+        sig = fn.get("name", "") + fn.get("arguments", "{}")
+        if sig not in seen:
+            seen.add(sig)
+            out.append(call)
+    return out
