@@ -4665,3 +4665,54 @@ Chunk 8 of the tools/ refactor plan. New capability module — not extracted fro
 | SHA | Description |
 |-----|-------------|
 | `445e3a52` | feat(tools): add registry.py — ToolRegistry immutable request-scoped tool lookup |
+
+---
+
+## Session 142 — tools/ Refactor: Full Module Split (2026-03-26)
+
+### What changed
+
+**New files created:**
+- `tools/coerce.py` — `_PARAM_ALIASES`, `_levenshtein`, `_fuzzy_match_param`, `_coerce_value`
+- `tools/score.py` — `_TOOL_CALL_MARKER_RE`, `_find_marker_pos`, `score_tool_call_confidence`
+- `tools/streaming.py` — `StreamingToolCallParser`
+- `tools/schema.py` — `validate_schema` (new: full JSON Schema enforcement)
+- `tools/format.py` — `encode_tool_calls` (new: canonical wire-format encoder)
+- `tools/inject.py` — `build_tool_instruction`, `_example_value`, `_PARAM_EXAMPLES`, `_tool_instruction_cache`
+- `tools/registry.py` — `ToolRegistry` (new: immutable request-scoped tool lookup)
+- `tests/test_coerce.py`, `tests/test_score.py`, `tests/test_streaming.py`
+- `tests/test_schema.py`, `tests/test_format.py`, `tests/test_inject.py`, `tests/test_registry.py`
+
+**Modified files:**
+- `tools/parse.py` — removed 418 lines of duplicated code; imports from new modules; all re-exports preserved. 1,490 → 1,085 lines.
+- `tools/__init__.py` — full public API re-export surface
+- `converters/cursor_helpers.py` — removed `build_tool_instruction`, `_example_value`, `_PARAM_EXAMPLES`, `_tool_instruction_cache`, `_assistant_tool_call_text` bodies; replaced with re-exports from `tools/inject` and `tools/format`
+- `docs/superpowers/specs/2026-03-25-tools-refactor-design.md` — created
+- `docs/superpowers/plans/2026-03-25-tools-refactor.md` — created
+
+### Which lines / functions
+- `tools/parse.py:parse_tool_calls_from_text` — unchanged behaviour; `_PARAM_ALIASES`, `_levenshtein`, `_fuzzy_match_param`, `_coerce_value`, `_find_marker_pos`, `score_tool_call_confidence`, `StreamingToolCallParser` all removed and imported from focused modules
+- `tools/inject.py:build_tool_instruction` — moved from `converters/cursor_helpers.py`; same signature `(tools, tool_choice, parallel_tool_calls=True)`
+- `tools/format.py:encode_tool_calls` — canonical replacement for `_assistant_tool_call_text`; `cursor_helpers` re-exports it
+- `tools/schema.py:validate_schema` — new function; enforces type, required, enum, minLength/maxLength, minimum/maximum, minItems/maxItems
+- `tools/registry.py:ToolRegistry` — new class; immutable after construction; `canonical_name`, `schema`, `known_params`, `allowed_exact`, `schema_map` methods
+
+### Why
+`tools/parse.py` had grown to 1,490 lines with six distinct responsibilities. `build_tool_instruction` was in `converters/` despite being pure tool logic. Full JSON Schema validation was absent — only param name presence was checked. `allowed_exact`/`schema_map` were rebuilt on every `parse_tool_calls_from_text` call. This refactor establishes clean module boundaries with zero breaking changes.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `ca74b5a1` | feat(tools): extract coerce.py |
+| `f8d10355` | fix(tools): remove unused structlog import; improve coerce.py test coverage |
+| `2e59718c` | feat(tools): extract score.py |
+| `2dca6e6d` | fix(tools): tighten score test assertions |
+| `e6e1a1fa` | feat(tools): extract streaming.py |
+| `a128b917` | fix(tools): strengthen streaming tests |
+| `1107b750` | refactor(tools): parse.py imports from coerce/score/streaming |
+| `11e5b882` | feat(tools): add schema.py |
+| `7b4faa23` | feat(tools): add format.py |
+| `445e3a52` | feat(tools): add registry.py |
+| `91f64681` | feat(tools): add inject.py (copy step) |
+| `0f2c43d3` | refactor(converters): cursor_helpers re-exports from tools/ |
+| `80b2558f` | test(tools): improve coerce.py and inject.py coverage to 90% |
