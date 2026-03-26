@@ -4716,3 +4716,49 @@ Chunk 8 of the tools/ refactor plan. New capability module — not extracted fro
 | `91f64681` | feat(tools): add inject.py (copy step) |
 | `0f2c43d3` | refactor(converters): cursor_helpers re-exports from tools/ |
 | `80b2558f` | test(tools): improve coerce.py and inject.py coverage to 90% |
+
+---
+
+## Session 143 — tools/ Phase 2: validate, budget, emitter, ToolRegistry wiring (2026-03-26)
+
+### What changed
+
+**New files created:**
+- `tools/validate.py` — `validate_tool_call_full` (sequential gate: validate_tool_call → validate_schema; schema check only runs on structurally valid calls)
+- `tools/budget.py` — `limit_tool_calls`, `repair_invalid_calls` (full 4-case behavior, uses validate_tool_call_full)
+- `tools/emitter.py` — `compute_tool_signature`, `parse_tool_arguments`, `serialize_tool_arguments`, `stream_anthropic_tool_input`, `OpenAIToolEmitter`
+- `tests/test_validate.py` (10 tests), `tests/test_budget.py` (8 tests), `tests/test_emitter.py` (10 tests), `tests/test_registry_wiring.py` (7 tests)
+- `docs/superpowers/specs/2026-03-26-tools-phase2-design.md`
+- `docs/superpowers/plans/2026-03-26-tools-phase2.md`
+
+**Modified files:**
+- `tools/parse.py:parse_tool_calls_from_text` — added `registry: ToolRegistry | None = None` param; registry fast-path skips per-call rebuild of allowed_exact/schema_map
+- `tools/streaming.py:StreamingToolCallParser` — added `registry` param to `__init__`, `feed()`, `finalize()`
+- `pipeline/tools.py` — removed 7 moved function/class bodies; added re-export aliases (placed after bodies so aliases win); `_parse_score_repair` stays
+- `pipeline/stream_openai.py` — direct imports from `tools.budget`, `tools.emitter`; constructs `ToolRegistry` once per request
+- `pipeline/stream_anthropic.py` — same
+
+### Which lines / functions
+- `tools/validate.py:validate_tool_call_full` — new function; calls `validate_tool_call` then `validate_schema` as sequential gate
+- `tools/budget.py:limit_tool_calls` — enforces `parallel_tool_calls=False`
+- `tools/budget.py:repair_invalid_calls` — four-case validation/repair loop using `validate_tool_call_full`
+- `tools/emitter.py:OpenAIToolEmitter` — extracted from `pipeline/tools.py`; `compute_tool_signature`, `parse_tool_arguments`, etc. also extracted
+- `tools/parse.py:parse_tool_calls_from_text` — added `registry` kwarg; fast-path uses `registry.allowed_exact()` + `registry.schema_map()`
+- `tools/streaming.py:StreamingToolCallParser.__init__` — added `registry` param; stored as `self._registry`; passed to both `feed()` and `finalize()`
+- `pipeline/tools.py` — bodies removed: `_compute_tool_signature`, `_parse_tool_arguments`, `_serialize_tool_arguments`, `_stream_anthropic_tool_input`, `_limit_tool_calls`, `_repair_invalid_calls`, `_OpenAIToolEmitter`; replaced with re-export aliases
+
+### Why
+Phase 2 closes the gaps left after Phase 1: `validate_schema` was dead code — now called in the production repair path. `ToolRegistry` existed but wasn't used — now eliminates per-call dict rebuilds in the streaming hot path. `pipeline/tools.py` had tool-domain logic — now extracted to `tools/` with proper boundaries.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `cd01b583` | feat(tools): add validate.py — validate_tool_call_full sequential gate |
+| `a8cd16b5` | fix(tools): validate_tool_call_full returns error on malformed JSON arguments |
+| `8eaabd7a` | feat(tools): add budget.py — limit_tool_calls, repair_invalid_calls; update pipeline callers |
+| `62ebbfb8` | fix(pipeline): move budget re-exports after def bodies so they overwrite local names |
+| `70b23565` | feat(tools): add emitter.py — OpenAIToolEmitter, compute_tool_signature, helpers |
+| `efa96a1f` | fix(pipeline): move emitter re-exports to after class body so they overwrite local definitions |
+| `8cbf6565` | feat(tools): wire ToolRegistry into parse_tool_calls_from_text and StreamingToolCallParser |
+| `3a2e6b93` | refactor(pipeline): tools.py removes moved bodies; only re-exports and _parse_score_repair remain |
+| `1e3f1d7b` | test(tools): improve validate.py coverage to 86% |
