@@ -4619,3 +4619,23 @@ Chunk 6 of the tools/ refactor plan. Provides a single authoritative encoder for
 | SHA | Description |
 |-----|-------------|
 | `7b4faa23` | feat(tools): add format.py — encode_tool_calls canonical wire-format encoder |
+
+---
+
+## Session 140 — tools/schema.py JSON Schema validator (2026-03-26)
+
+### What changed
+- `tools/schema.py` — created
+- `tests/test_schema.py` — created
+
+### Which lines / functions
+- `tools/schema.py:validate_schema` — pure function; validates tool call args against a JSON Schema `parameters` object; checks required fields, type correctness (string/integer/number/boolean/array/object), enum membership, string minLength/maxLength, number minimum/maximum, array minItems/maxItems; returns `(is_valid, errors)` tuple; bool correctly excluded from integer/number checks
+- `tools/schema.py:_TYPE_CHECKS` — module-level dict mapping JSON Schema type names to Python types/tuples for `isinstance` checks
+
+### Why
+Chunk 5 of the tools/ refactor plan (`docs/superpowers/plans/2026-03-25-tools-refactor.md`). New capability module — not extracted from existing code. Provides full JSON Schema enforcement for tool call arguments, covering all constraint types needed by `repair_tool_call()` and future validation hooks. No new pip dependencies — pure Python.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `11e5b882` | feat(tools): add schema.py — validate_schema with full JSON Schema enforcement |
