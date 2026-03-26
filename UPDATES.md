@@ -4890,3 +4890,32 @@ Phase 4 Chunk 2 of tools/ decomposition. `repair_tool_call` was a 138-line funct
 |-----|-------------|
 | `23a2f7f9` | feat(tools): add repair.py — repair_tool_call extracted from parse.py (copy step) |
 | `f462ff5f` | refactor(tools): parse.py imports repair_tool_call from tools/repair; budget.py imports direct |
+
+---
+
+## Session 149 — tools/ Phase 4: json_repair, repair, confidence (2026-03-26)
+
+### What changed
+
+**New files:**
+- `tools/json_repair.py` — 7 JSON resilience functions: `_repair_json_control_chars`, `_escape_unescaped_quotes`, `_extract_after_marker`, `_lenient_json_loads`, `_decode_json_escapes`, `_extract_truncated_args`, `extract_json_candidates`
+- `tools/repair.py` — `repair_tool_call` (fuzzy param matching, type coercion, required param filling)
+- `tools/confidence.py` — `CONFIDENCE_THRESHOLD = 0.3` (single source of truth), `is_confident()` helper, re-exports from `tools.score`
+- `tests/test_json_repair.py` (21 tests), `tests/test_repair.py` (6 tests), `tests/test_confidence.py` (6 tests)
+
+**Modified files:**
+- `tools/parse.py` — removed extracted bodies; 1006 → 334 lines (-672 lines total across Phase 4)
+- `tools/budget.py` — `repair_tool_call` now imported from `tools.repair` (direct, not via parse.py)
+
+### Why
+Phase 4 completes the parse.py decomposition: JSON repair logic, call repair logic, and confidence scoring now each live in focused modules with dedicated tests. `CONFIDENCE_THRESHOLD` replaces the hardcoded `0.3` in parse.py.
+
+### Commit SHAs
+| SHA | Description |
+|-----|-------------|
+| `39316b95` | feat(tools): add json_repair.py (copy step) |
+| `89fee2fc` | refactor(tools): parse.py imports from tools/json_repair |
+| `23a2f7f9` | feat(tools): add repair.py (copy step) |
+| `f462ff5f` | refactor(tools): parse.py imports repair_tool_call from tools/repair |
+| `4affc3c9` | feat(tools): add confidence.py |
+| `ab1f708a` | feat(tools): wire CONFIDENCE_THRESHOLD into parse.py |
