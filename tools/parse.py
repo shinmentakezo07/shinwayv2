@@ -17,11 +17,7 @@ import structlog
 if TYPE_CHECKING:
     from tools.registry import ToolRegistry
 
-try:
-    from metrics.parse_metrics import inc_parse_outcome
-except ImportError:
-    def inc_parse_outcome(outcome: str, count: int = 1) -> None:  # type: ignore[misc]
-        pass
+from tools.metrics import inc_parse_outcome
 
 log = structlog.get_logger()
 
