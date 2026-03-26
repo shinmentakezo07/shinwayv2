@@ -10,7 +10,7 @@ from __future__ import annotations
 import structlog
 
 from tools.metrics import inc_tool_repair
-from tools.parse import repair_tool_call
+from tools.repair import repair_tool_call
 from tools.validate import validate_tool_call_full
 
 log = structlog.get_logger()
