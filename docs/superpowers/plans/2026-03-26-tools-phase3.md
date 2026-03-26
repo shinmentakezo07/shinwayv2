@@ -170,21 +170,37 @@ git commit -m "feat(tools): add metrics.py — stable instrumentation wrapper; i
 
 - [ ] **Step 1: Add test to existing `tests/test_registry.py`**
 
-Read the current file first, then add at the end:
+Read `tests/test_registry.py` first. Confirm `_tool()` helper exists — if not, add it:
 
 ```python
-def test_collision_warning_emitted(caplog):
+def _tool(name: str, **props) -> dict:
+    properties = {k: {"type": t} for k, t in props.items()}
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "parameters": {"type": "object", "properties": properties},
+        },
+    }
+```
+
+Then append the collision test. Note: `ToolRegistry` uses `structlog` which is NOT routed to stdlib `logging` in this project. Use `structlog.testing.capture_logs()` instead of `caplog`:
+
+```python
+def test_collision_warning_emitted():
     """ToolRegistry warns when two tool names normalize to the same string."""
-    import logging
-    with caplog.at_level(logging.WARNING):
+    import structlog.testing
+    with structlog.testing.capture_logs() as cap:
         # "write_file" and "write-file" both normalize to "writefile"
         tools = [
             _tool("write_file", content="string"),
             _tool("write-file", content="string"),
         ]
         ToolRegistry(tools)
-    assert any("collision" in r.message.lower() or "normalization" in r.message.lower()
-               for r in caplog.records)
+    assert any(
+        "collision" in str(entry).lower() or "normalization" in str(entry).lower()
+        for entry in cap
+    )
 ```
 
 - [ ] **Step 2: Run — expect FAIL** (warning not yet emitted)
@@ -257,15 +273,19 @@ git commit -m "fix(tools): registry.py emits tool_name_normalization_collision w
 
 Read the current file first, then append:
 
+Note: structlog is NOT routed to stdlib `logging` in this project — use `structlog.testing.capture_logs()` instead of `caplog`:
+
 ```python
-def test_parse_tool_arguments_logs_on_failure(caplog):
+def test_parse_tool_arguments_logs_on_failure():
     """parse_tool_arguments warns when JSON is invalid instead of silently returning {}."""
-    import logging
-    with caplog.at_level(logging.WARNING):
+    import structlog.testing
+    with structlog.testing.capture_logs() as cap:
         result = parse_tool_arguments("not{json")
     assert result == {}
-    assert any("parse" in r.message.lower() or "arguments" in r.message.lower()
-               for r in caplog.records)
+    assert any(
+        "parse" in str(entry).lower() or "arguments" in str(entry).lower()
+        for entry in cap
+    )
 ```
 
 - [ ] **Step 2: Run — expect FAIL**
@@ -471,6 +491,8 @@ pytest tests/test_sanitize.py -v 2>&1 | tail -5
 
 - [ ] **Step 2: Write `tools/sanitize.py`**
 
+First read lines 30-46 of `converters/cursor_helpers.py` to get the exact regex. Then write:
+
 ```python
 """
 Shin Proxy — User content sanitization.
@@ -488,25 +510,16 @@ import re
 
 _CURSOR_REPLACEMENT = "the-editor"
 
+# Copy this regex EXACTLY from converters/cursor_helpers.py lines 42-46.
+# The correct regex is:
 _CURSOR_WORD_RE = re.compile(
-    r"(?<![/\\a-zA-Z0-9])"
-    r"[Cc][Uu][Rr][Ss][Oo][Rr]"
-    r"(?![/\\.](\w))"
+    r"(?<![/\\a-zA-Z0-9])"      # not preceded by path sep or word char
+    r"[Cc][Uu][Rr][Ss][Oo][Rr]" # the word itself
+    r"(?![/\\.](\w))"           # not followed by path sep, dot+word (WRONG — see below)
 )
-
-
-def _sanitize_user_content(text: str) -> str:
-    """Replace standalone 'cursor' (any case) with a neutral placeholder.
-
-    Not applied to system prompts or tool instructions.
-    Preserves cursor when it appears as a path component.
-    """
-    if not text:
-        return text or ""
-    return _CURSOR_WORD_RE.sub(_CURSOR_REPLACEMENT, text)
 ```
 
-VERIFY the regex is byte-for-byte identical to the one in `converters/cursor_helpers.py` — the original has a specific lookbehind/lookahead. Read cursor_helpers.py carefully before writing.
+**IMPORTANT: Do NOT copy the regex from this plan document.** The source of truth is `converters/cursor_helpers.py` lines 42-46. Read those lines first, then copy them verbatim. The correct regex ends with `r"(?![/\\.](\w))"` — no capture group in the lookahead. Any template in this document may have encoding artifacts. Always read the source file.
 
 **Do NOT remove originals from `cursor_helpers.py` yet — that is Task 11.**
 
@@ -685,6 +698,8 @@ pytest tests/test_results.py -v 2>&1 | tail -5
 
 - [ ] **Step 2: Write `tools/results.py`**
 
+`_normalize_name` is defined in `tools/parse.py` (line 47) and `tools/registry.py` (line 15) — it is NOT in `tools/coerce.py`. Copy it directly into `tools/results.py` rather than importing from a private location.
+
 ```python
 """
 Shin Proxy — Tool call result builder.
@@ -694,24 +709,23 @@ Builds normalized tool call dicts from merged parsed candidates.
 """
 from __future__ import annotations
 
+import re
 import uuid
 
 import msgspec.json as msgjson
 import structlog
 
-from tools.coerce import _fuzzy_match_param, _normalize_name
+from tools.coerce import _fuzzy_match_param
 
 log = structlog.get_logger()
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize tool name for fuzzy matching — lowercase, strip separators."""
+    return re.sub(r"[-_\s]", "", (name or "").lower())
 ```
 
-Then copy `_build_tool_call_results` verbatim from `tools/parse.py`. The function uses `_normalize_name` and `_fuzzy_match_param` — both now live in `tools/coerce.py`. Check the imports are correct.
-
-**NOTE:** `_normalize_name` is defined in `tools/parse.py` (not exported). Check if it is also in `tools/coerce.py` — if not, copy it to `tools/results.py` directly.
-
-Check first:
-```bash
-grep -n '_normalize_name' /teamspace/studios/this_studio/dikders/tools/parse.py /teamspace/studios/this_studio/dikders/tools/coerce.py
-```
+Then copy `_build_tool_call_results` verbatim from `tools/parse.py` (approximately lines 827-916). The function calls `_normalize_name` and `_fuzzy_match_param` — both are now available in `tools/results.py`.
 
 **Do NOT remove from `tools/parse.py` yet — that is Task 14.**
 
