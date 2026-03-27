@@ -257,6 +257,9 @@ async def text_completions(
 ):
     """Legacy text completion — wraps chat completions."""
     api_key = await verify_bearer(authorization)
+    from middleware.logging import get_ctx as _get_ctx
+    if _ctx := _get_ctx(request):
+        _ctx.set_api_key(api_key)
     enforce_rate_limit(api_key, request=request)
     key_rec = await get_key_record(api_key)
     await enforce_per_key_rate_limit(api_key, key_record=key_rec, request=request)
@@ -267,12 +270,29 @@ async def text_completions(
     if not isinstance(prompt, str):
         raise RequestValidationError("prompt must be a string")
     model = resolve_model(payload.get("model"))
+    if _ctx := _get_ctx(request):
+        _ctx.model = model
+        _ctx.stream = False
     enforce_allowed_models(key_rec, model)
+
+    _raw_max_tokens = payload.get("max_tokens")
+    max_tokens: int | None = int(_raw_max_tokens) if _raw_max_tokens is not None else None
+
+    temperature: float | None = None
+    _raw_temp = payload.get("temperature")
+    if _raw_temp is not None:
+        try:
+            temperature = float(_raw_temp)
+        except (TypeError, ValueError):
+            pass
+
     messages = [{"role": "user", "content": prompt}]
     cursor_messages = openai_to_cursor(messages, model=model)
     params = PipelineParams(
         api_style="openai", model=model, messages=messages,
         cursor_messages=cursor_messages, stream=False, api_key=api_key,
+        max_tokens=max_tokens, temperature=temperature,
+        request_id=getattr(request.state, "request_id", ""),
     )
     client = CursorClient(get_http_client())
     resp = await handle_openai_non_streaming(client, params, None)
