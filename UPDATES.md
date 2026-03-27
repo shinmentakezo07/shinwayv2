@@ -5053,3 +5053,41 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | SHA | Description |
 |---|---|
 | `fec27ac6` | fix(tests): eliminate env contamination — 1057 passing, 0 failures |
+
+## Session 154 — 7 enhancements: temperature, per-model analytics, responses CRUD, live catalogue, idempotency, cache invalidation (2026-03-27)
+
+### What changed
+- `pipeline/params.py` — added `temperature: float | None` field
+- `routers/openai.py` — parse `temperature` from payload into `PipelineParams`
+- `analytics.py` — `RequestLog.model` field; `models: {}` breakdown in `_ensure()`; per-model counter in `record()`
+- `pipeline/record.py` — pass `params.model` to `RequestLog`
+- `storage/responses.py` — `list_by_key(api_key, limit)` and `delete(response_id, api_key)` methods
+- `routers/responses.py` — `GET /v1/responses` (list), `GET /v1/responses/{id}`, `DELETE /v1/responses/{id}`
+- `cache.py` — `aclear_by_model(model)` and `aclear_by_key(api_key)` on `ResponseCache`
+- `routers/model_router.py` — `_runtime_catalogue` dict; `add_model()` and `remove_model()` functions; `all_models()` merges built-in + runtime
+- `routers/internal.py` — 6 new endpoints: `DELETE /v1/internal/idempotency/{key}`, `GET /v1/internal/idempotency/stats`, `POST /v1/internal/models/{id}`, `DELETE /v1/internal/models/{id}`, `POST /v1/internal/cache/clear/model/{model}`, `POST /v1/internal/cache/clear/key/{key}`
+
+### Which lines / functions
+- `analytics.py:RequestLog` — added `model: str = ""`
+- `analytics.py:AnalyticsStore._ensure` — added `"models": {}` to key record
+- `analytics.py:AnalyticsStore.record` — `rec["models"][log.model] += 1`
+- `storage/responses.py:ResponseStore.list_by_key` — new method
+- `storage/responses.py:ResponseStore.delete` — new method
+- `routers/responses.py` — 3 new endpoints before `_SSE_HEADERS`
+- `cache.py:ResponseCache.aclear_by_model` — scans L1 values for model field
+- `cache.py:ResponseCache.aclear_by_key` — full L1 clear (cache is content-keyed)
+- `routers/model_router.py:_runtime_catalogue`, `add_model`, `remove_model` — appended after `all_models`
+- `routers/internal.py` — idempotency section before cache, model CRUD + cache targeted invalidation after deep_health
+
+### Why
+- `temperature`: was parsed and validated but silently dropped — never reached PipelineParams
+- Per-model analytics: operators had no way to see which model consumed the most tokens
+- ResponseStore CRUD: `/v1/responses` had no list or delete endpoints — OpenAI-compatible clients expect them
+- Live model catalogue: adding a new model required a code deploy; now POST /v1/internal/models adds it at runtime
+- Idempotency release: stuck sentinel locks had no admin escape hatch; now `DELETE /v1/internal/idempotency/{key}` releases them
+- Cache targeted invalidation: `aclear()` only — no way to evict a specific model's cached responses
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| `2adefc90` | feat: 7 enhancements |
