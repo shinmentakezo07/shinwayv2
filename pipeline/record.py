@@ -39,6 +39,7 @@ async def _record(
         RequestLog(
             api_key=params.api_key,
             provider=provider,
+            model=params.model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_usd=cost,

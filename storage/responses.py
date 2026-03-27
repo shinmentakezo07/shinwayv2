@@ -87,5 +87,44 @@ class ResponseStore:
             return None
 
 
+    async def list_by_key(self, api_key: str, limit: int = 20) -> list[dict]:
+        """Return the most recent `limit` responses owned by api_key, newest first."""
+        if self._db is None:
+            raise RuntimeError("ResponseStore not initialised — call init() first")
+        try:
+            async with self._db.execute(
+                "SELECT id, created_at, payload FROM responses WHERE api_key = ? ORDER BY created_at DESC LIMIT ?",
+                (api_key, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+            results = []
+            for row in rows:
+                try:
+                    payload = json.loads(row[2])
+                except Exception:
+                    payload = {"id": row[0]}
+                payload.setdefault("created_at", row[1])
+                results.append(payload)
+            return results
+        except Exception:
+            log.warning("response_store_list_failed", api_key=api_key[:16], exc_info=True)
+            return []
+
+    async def delete(self, response_id: str, api_key: str) -> bool:
+        """Delete a stored response. Returns True if deleted, False if not found or wrong key."""
+        if self._db is None:
+            raise RuntimeError("ResponseStore not initialised — call init() first")
+        try:
+            cur = await self._db.execute(
+                "DELETE FROM responses WHERE id = ? AND api_key = ?",
+                (response_id, api_key),
+            )
+            await self._db.commit()
+            return (cur.rowcount or 0) > 0
+        except Exception:
+            log.warning("response_store_delete_failed", response_id=response_id, exc_info=True)
+            return False
+
+
 # Module-level singleton — initialised in app lifespan
 response_store: ResponseStore = ResponseStore()

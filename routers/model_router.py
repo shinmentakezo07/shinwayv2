@@ -83,8 +83,34 @@ def model_info(model_id: str) -> dict:
 
 
 def all_models() -> list[dict]:
-    """Return the full model catalogue list."""
+    """Return the full model catalogue list (built-in + runtime additions)."""
     return [
         {"id": mid, **meta}
-        for mid, meta in _CATALOGUE.items()
+        for mid, meta in {**_CATALOGUE, **_runtime_catalogue}.items()
     ]
+
+
+# ── Runtime catalogue — models added/removed without restart ──────────────────
+# Keyed by model_id, same shape as _CATALOGUE values.
+_runtime_catalogue: dict[str, dict] = {}
+
+
+def add_model(model_id: str, context: int, owner: str) -> dict:
+    """Add a model to the runtime catalogue. Takes effect immediately."""
+    entry = {"context": context, "owner": owner}
+    _runtime_catalogue[model_id] = entry
+    log.info("model_added", model_id=model_id, owner=owner)
+    return {"id": model_id, **entry}
+
+
+def remove_model(model_id: str) -> bool:
+    """Remove a model from the runtime catalogue.
+
+    Built-in _CATALOGUE entries cannot be removed — only runtime additions.
+    Returns True if removed, False if not found in runtime catalogue.
+    """
+    if model_id in _runtime_catalogue:
+        del _runtime_catalogue[model_id]
+        log.info("model_removed", model_id=model_id)
+        return True
+    return False

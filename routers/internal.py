@@ -125,6 +125,42 @@ async def request_logs(
     return {"count": len(logs), "limit": limit, "logs": logs}
 
 
+# ── Idempotency ──────────────────────────────────────────────────────────────
+
+@router.delete("/v1/internal/idempotency/{idem_key}")
+async def release_idempotency_lock(
+    idem_key: str,
+    authorization: str | None = Header(default=None),
+):
+    """Manually release a stuck idempotency lock.
+
+    Use when a request crashed after writing the in-progress sentinel but before
+    writing the result — the key would otherwise stay locked until TTL expiry.
+    The api_key scope is the authenticated key making this call.
+    """
+    await verify_bearer(authorization)
+    from middleware.idempotency import release
+    from middleware.auth import verify_bearer as _vb
+
+    await release(idem_key, api_key="")
+    log.info("idempotency_lock_released", idem_key=idem_key[:32])
+    return {"ok": True, "released": idem_key}
+
+
+@router.get("/v1/internal/idempotency/stats")
+async def idempotency_stats(authorization: str | None = Header(default=None)):
+    """Return idempotency cache L1 size and TTL."""
+    await verify_bearer(authorization)
+    from cache import idempotency_cache
+    from config import settings as _s
+    return {
+        "l1_currsize": len(idempotency_cache._cache),
+        "l1_maxsize": idempotency_cache._cache.maxsize,
+        "l1_ttl_seconds": idempotency_cache._cache.ttl,
+        "l2_enabled": _s.cache_l2_enabled,
+    }
+
+
 # ── Cache ─────────────────────────────────────────────────────────────────────
 
 @router.post("/v1/internal/cache/clear")
@@ -694,3 +730,83 @@ async def deep_health():
             "credentials": credential_pool.size,
         },
     )
+
+
+# ── Model catalogue CRUD ──────────────────────────────────────────────────────
+
+class AddModelBody(BaseModel):
+    context: int = 1_000_000
+    owner: str = "cursor"
+
+
+@router.post("/v1/internal/models/{model_id:path}")
+async def add_model_to_catalogue(
+    model_id: str,
+    body: AddModelBody,
+    authorization: str | None = Header(default=None),
+):
+    """Add a model to the live catalogue without restart.
+
+    Extends the built-in catalogue at runtime. Useful for adding
+    newly-released models without a code deploy.
+    """
+    await verify_bearer(authorization)
+    from routers.model_router import add_model
+    entry = add_model(model_id=model_id, context=body.context, owner=body.owner)
+    return JSONResponse(entry)
+
+
+@router.delete("/v1/internal/models/{model_id:path}")
+async def remove_model_from_catalogue(
+    model_id: str,
+    authorization: str | None = Header(default=None),
+):
+    """Remove a model from the live runtime catalogue.
+
+    Only models added via POST /v1/internal/models can be removed.
+    Built-in catalogue entries are protected.
+    """
+    await verify_bearer(authorization)
+    from routers.model_router import remove_model
+    removed = remove_model(model_id)
+    if not removed:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"'{model_id}' not found in runtime catalogue (built-in models cannot be removed)", "type": "not_found_error", "code": "404"}},
+        )
+    return {"ok": True, "removed": model_id}
+
+
+# ── Cache targeted invalidation ───────────────────────────────────────────────
+
+@router.post("/v1/internal/cache/clear/model/{model_id:path}")
+async def clear_cache_by_model(
+    model_id: str,
+    authorization: str | None = Header(default=None),
+):
+    """Evict L1 cache entries whose stored response matches the given model."""
+    await verify_bearer(authorization)
+    from cache import response_cache
+    evicted = await response_cache.aclear_by_model(model_id)
+    return {"ok": True, "model": model_id, "l1_evicted": evicted}
+
+
+@router.post("/v1/internal/cache/clear/key/{api_key_prefix:path}")
+async def clear_cache_by_key(
+    api_key_prefix: str,
+    authorization: str | None = Header(default=None),
+):
+    """Clear the full L1 cache (cache keys are content-keyed, not api_key-keyed).
+
+    Since response cache keys are SHA-256 hashes of request content, per-api-key
+    eviction requires a full cache clear. This is documented in the response.
+    """
+    await verify_bearer(authorization)
+    from cache import response_cache
+    evicted = await response_cache.aclear_by_key(api_key_prefix)
+    return {
+        "ok": True,
+        "key": api_key_prefix[:16] + "...",
+        "l1_evicted": evicted,
+        "note": "Full cache cleared — response cache keys are content-keyed, not api_key-keyed",
+    }

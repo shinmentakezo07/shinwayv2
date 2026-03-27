@@ -28,3 +28,4 @@ class PipelineParams:
     stop: list[str] | None = None  # stop sequences requested by client (informational — not enforced upstream)
     request_id: str = ""  # propagated from request_id middleware
     fallback_model: str | None = None  # set by _call_with_retry when a fallback is active; None on primary
+    temperature: float | None = None  # pass-through from client; informational only (upstream ignores it but we record it)

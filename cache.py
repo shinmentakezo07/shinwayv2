@@ -183,6 +183,35 @@ class ResponseCache:
         l2_count = await self._l2.clear()
         return {"l1_cleared": l1_count, "l2_cleared": l2_count}
 
+    async def aclear_by_model(self, model: str) -> int:
+        """Evict all L1 entries whose cache key was built for a specific model.
+
+        Cache keys are SHA-256 hashes so we cannot reverse them — we scan L1
+        values for a matching model field. L2 is not scanned (no indexing).
+        Returns the count of entries evicted.
+        """
+        # L1 values are the raw response dicts; model is embedded in the cache key
+        # not the value, so we evict all entries that contain the model in their
+        # stored value (best-effort — model is included in 'model' field of response).
+        to_evict = [
+            k for k, v in list(self._cache.items())
+            if isinstance(v, dict) and v.get("model") == model
+        ]
+        for k in to_evict:
+            self._cache.pop(k, None)
+        log.info("cache_evicted_by_model", model=model, evicted=len(to_evict))
+        return len(to_evict)
+
+    async def aclear_by_key(self, api_key: str) -> int:
+        """Evict all L1 entries. Since cache keys are content-keyed (not api_key-keyed),
+        a full clear is the only safe option when targeting a specific api_key.
+        Returns count of entries cleared.
+        """
+        l1_count = len(self._cache)
+        self._cache.clear()
+        log.info("cache_evicted_by_key", api_key=api_key[:16], evicted=l1_count)
+        return l1_count
+
     # ── Cache key builder ─────────────────────────────────────────────────────
 
     @staticmethod

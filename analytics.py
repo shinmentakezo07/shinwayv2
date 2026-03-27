@@ -31,6 +31,7 @@ class RequestLog:
     cache_hit: bool = False
     ttft_ms: int | None = None
     output_tps: float | None = None
+    model: str = ""  # model ID for per-model breakdown
     ts: float = field(default_factory=time.time)
 
 
@@ -54,6 +55,7 @@ class AnalyticsStore:
                 "latency_ms_total": 0.0,
                 "last_request_ts": 0,
                 "providers": {},
+                "models": {},
             }
         return self._by_key[api_key]
 
@@ -73,6 +75,9 @@ class AnalyticsStore:
             rec["providers"][log.provider] = (
                 rec["providers"].get(log.provider, 0) + 1
             )
+            # Per-model breakdown
+            if log.model:
+                rec["models"][log.model] = rec["models"].get(log.model, 0) + 1
             # Rolling log entry
             entry: dict = {
                 "ts": int(log.ts),

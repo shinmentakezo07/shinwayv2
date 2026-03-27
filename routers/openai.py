@@ -205,6 +205,14 @@ async def chat_completions(
     ctx_result = context_engine.check_preflight(messages, tools, model, cursor_messages)
     anthropic_tools = to_anthropic_tool_format(tools) if tools else None
 
+    temperature: float | None = None
+    _raw_temp = payload.get("temperature")
+    if _raw_temp is not None:
+        try:
+            temperature = float(_raw_temp)
+        except (TypeError, ValueError):
+            pass
+
     params = PipelineParams(
         api_style="openai",
         model=model,
@@ -221,6 +229,7 @@ async def chat_completions(
         max_tokens=max_tokens,
         include_usage=include_usage,
         stop=stop,
+        temperature=temperature,
         request_id=getattr(request.state, "request_id", ""),
     )
 

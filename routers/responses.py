@@ -42,6 +42,65 @@ from tools.normalize import normalize_openai_tools, validate_tool_choice, to_ant
 router = APIRouter()
 log = structlog.get_logger()
 
+
+# ── GET /v1/responses ─────────────────────────────────────────────────────────
+
+@router.get("/v1/responses")
+async def list_responses(
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """List stored responses for the authenticated key, newest first."""
+    from fastapi import Query
+    limit = int(request.query_params.get("limit", 20))
+    limit = max(1, min(limit, 100))
+    api_key = await verify_bearer(authorization)
+    enforce_rate_limit(api_key, request=request)
+    items = await response_store.list_by_key(api_key, limit=limit)
+    return JSONResponse({"object": "list", "data": items, "count": len(items)})
+
+
+# ── GET /v1/responses/{response_id} ──────────────────────────────────────────
+
+@router.get("/v1/responses/{response_id}")
+async def get_response(
+    response_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Retrieve a stored response by ID."""
+    api_key = await verify_bearer(authorization)
+    enforce_rate_limit(api_key, request=request)
+    resp = await response_store.get(response_id, api_key=api_key)
+    if resp is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"Response '{response_id}' not found", "type": "not_found_error", "code": "404"}},
+        )
+    return JSONResponse(resp)
+
+
+# ── DELETE /v1/responses/{response_id} ───────────────────────────────────────
+
+@router.delete("/v1/responses/{response_id}")
+async def delete_response(
+    response_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+):
+    """Delete a stored response."""
+    api_key = await verify_bearer(authorization)
+    enforce_rate_limit(api_key, request=request)
+    deleted = await response_store.delete(response_id, api_key=api_key)
+    if not deleted:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"Response '{response_id}' not found", "type": "not_found_error", "code": "404"}},
+        )
+    log.info("response_deleted", response_id=response_id)
+    return JSONResponse({"id": response_id, "object": "response", "deleted": True})
+
+
 _SSE_HEADERS = {
     "X-Accel-Buffering": "no",
     "Cache-Control": "no-cache",
