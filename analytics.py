@@ -33,6 +33,10 @@ class RequestLog:
     output_tps: float | None = None
     model: str = ""  # model ID for per-model breakdown
     ts: float = field(default_factory=time.time)
+    # Optional prompt/response capture — only populated when prompt_logging is enabled
+    prompt: list[dict] | None = None
+    response: str | None = None
+    request_id: str = ""
 
 
 class AnalyticsStore:
@@ -83,6 +87,7 @@ class AnalyticsStore:
                 "ts": int(log.ts),
                 "api_key": log.api_key or "anonymous",
                 "provider": log.provider,
+                "model": log.model,
                 "input_tokens": log.input_tokens,
                 "output_tokens": log.output_tokens,
                 "latency_ms": round(log.latency_ms, 1),
@@ -93,6 +98,12 @@ class AnalyticsStore:
                 entry["ttft_ms"] = log.ttft_ms
             if log.output_tps is not None:
                 entry["output_tps"] = round(log.output_tps, 1)
+            if log.request_id:
+                entry["request_id"] = log.request_id
+            if log.prompt is not None:
+                entry["prompt"] = log.prompt
+            if log.response is not None:
+                entry["response"] = log.response
             self._log.appendleft(entry)
 
     async def snapshot(self) -> dict:

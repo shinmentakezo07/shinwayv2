@@ -58,6 +58,14 @@ class Settings(BaseSettings):
         default="round_robin", alias="SHINWAY_CURSOR_SELECTION_STRATEGY"
     )
 
+    # ── Prompt logging ────────────────────────────────────────────────────────
+    # When enabled, raw messages and response text are stored in the analytics
+    # ring buffer and exposed via /v1/internal/logs for inspection in the Admin UI.
+    # Disable in production if prompts contain sensitive data.
+    prompt_logging_enabled: bool = Field(default=False, alias="SHINWAY_PROMPT_LOGGING")
+    # Max characters of response text captured per entry (prevents huge blobs in memory)
+    prompt_logging_max_response_chars: int = Field(default=8000, alias="SHINWAY_PROMPT_LOGGING_MAX_RESPONSE_CHARS")
+
     # ── Cache ───────────────────────────────────────────────────────────────
     cache_enabled: bool = Field(default=True, alias="SHINWAY_CACHE_ENABLED")
     cache_ttl_seconds: int = Field(default=45, alias="SHINWAY_CACHE_TTL_SECONDS")

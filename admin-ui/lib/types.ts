@@ -22,11 +22,18 @@ export interface LogEntry {
   ts: number
   api_key: string
   provider: string
+  model?: string
   input_tokens: number
   output_tokens: number
   latency_ms: number
   cache_hit: boolean
   cost_usd: number
+  ttft_ms?: number
+  output_tps?: number
+  request_id?: string
+  // Prompt/response capture — only present when prompt_logging is enabled
+  prompt?: Array<{ role: string; content: string | unknown }>
+  response?: string
 }
 
 export interface LogsResponse {

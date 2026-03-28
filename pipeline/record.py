@@ -44,6 +44,15 @@ async def _record(
     input_tokens = count_message_tokens(params.messages, params.model)
     output_tokens = estimate_from_text(text, params.model)
     cost = estimate_cost(provider, input_tokens, output_tokens)
+
+    # Capture prompt/response only when enabled — stored for UI inspection
+    prompt_data: list[dict] | None = None
+    response_data: str | None = None
+    if settings.prompt_logging_enabled:
+        prompt_data = params.messages
+        max_chars = settings.prompt_logging_max_response_chars
+        response_data = text[:max_chars] + "…" if len(text) > max_chars else text
+
     await analytics.record(
         RequestLog(
             api_key=params.api_key,
@@ -56,6 +65,9 @@ async def _record(
             cache_hit=cache_hit,
             ttft_ms=effective_ttft,
             output_tps=output_tps,
+            request_id=params.request_id,
+            prompt=prompt_data,
+            response=response_data,
         )
     )
     if settings.quota_enabled and params.api_key:

@@ -61,6 +61,8 @@ OVERRIDABLE_KEYS: dict[str, type] = {
     "max_tools": int,
     "idem_ttl_seconds": int,
     "idem_max_entries": int,
+    "prompt_logging_enabled": bool,
+    "prompt_logging_max_response_chars": int,
 }
 
 _DEFAULT_PERSIST_PATH = Path("runtime.json")

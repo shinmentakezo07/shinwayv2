@@ -63,6 +63,16 @@ export function LogsTable({ logs, onRowClick }: Props) {
         )
       },
     }),
+    ch.accessor('model', {
+      header: 'Model',
+      cell: ({ getValue }) => {
+        const v = getValue()
+        if (!v) return <span className="lt-cell-mono lt-muted">—</span>
+        // Show short name: last segment after last slash or dash-delimited last part
+        const short = v.split('/').pop() ?? v
+        return <span className="lt-model-chip" title={v}>{short}</span>
+      },
+    }),
     ch.accessor('input_tokens', {
       header: 'Input',
       cell: ({ getValue }) => (
@@ -152,7 +162,7 @@ export function LogsTable({ logs, onRowClick }: Props) {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="lt-empty">
+                  <td colSpan={9} className="lt-empty">
                     <Activity size={28} style={{ color: 'rgba(255,255,255,0.07)' }} />
                     <span className="lt-empty-title">No log entries</span>
                     <span className="lt-empty-sub">Send a request to see data here</span>
@@ -224,11 +234,12 @@ const CSS = `
 /* ts */ .lt-table colgroup col:nth-child(1) { width: 80px; }
 /* key */ .lt-table colgroup col:nth-child(2) { width: 100px; }
 /* provider */ .lt-table colgroup col:nth-child(3) { width: 100px; }
-/* input */ .lt-table colgroup col:nth-child(4) { width: 70px; }
-/* output */ .lt-table colgroup col:nth-child(5) { width: 70px; }
-/* latency */ .lt-table colgroup col:nth-child(6) { width: 80px; }
-/* cache */ .lt-table colgroup col:nth-child(7) { width: 60px; }
-/* cost */ .lt-table colgroup col:nth-child(8) { width: 80px; }
+/* model */ .lt-table colgroup col:nth-child(4) { width: 140px; }
+/* input */ .lt-table colgroup col:nth-child(5) { width: 70px; }
+/* output */ .lt-table colgroup col:nth-child(6) { width: 70px; }
+/* latency */ .lt-table colgroup col:nth-child(7) { width: 80px; }
+/* cache */ .lt-table colgroup col:nth-child(8) { width: 60px; }
+/* cost */ .lt-table colgroup col:nth-child(9) { width: 80px; }
 
 /* ── Sticky header ──────────────────────────────────────────────── */
 .lt-thead tr {
@@ -313,7 +324,18 @@ const CSS = `
 /* ── Latency cell ───────────────────────────────────────────────── */
 .lt-latency { display: flex; align-items: center; gap: 5px; }
 
-/* ── Cache cells ────────────────────────────────────────────────── */
+/* ── Model chip ─────────────────────────────────────────────────── */
+.lt-model-chip {
+  font-family: var(--mono); font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px; padding: 2px 7px;
+  white-space: nowrap; max-width: 130px;
+  overflow: hidden; text-overflow: ellipsis; display: inline-block;
+}
+
+/* ── Cache cells ─────────────────────────────────────────────────── */
 .lt-cache-hit {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 10.5px; font-family: var(--mono);

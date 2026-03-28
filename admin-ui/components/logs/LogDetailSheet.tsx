@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CheckCircle, XCircle, Clock, Zap, DollarSign, Activity, Key, Calendar } from 'lucide-react'
+import { X, CheckCircle, XCircle, Clock, Zap, DollarSign, Activity, Key, Calendar, MessageSquare, Bot, Hash } from 'lucide-react'
 import { formatCost, formatLatency, timeAgo } from '@/lib/utils'
 import type { LogEntry } from '@/lib/types'
 
@@ -55,6 +55,42 @@ function latencyLabel(ms: number) {
   if (ms > 5000)  return 'slow'
   if (ms > 2000)  return 'moderate'
   return 'fast'
+}
+
+function PromptMessage({ role, content }: { role: string; content: unknown }) {
+  const isUser      = role === 'user'
+  const isAssistant = role === 'assistant'
+  const isSystem    = role === 'system'
+
+  const roleColor = isUser      ? 'rgba(74,155,184,0.8)'
+                  : isAssistant ? 'rgba(0,229,160,0.75)'
+                  : isSystem    ? 'rgba(251,191,36,0.7)'
+                  : 'rgba(255,255,255,0.4)'
+
+  const roleBg    = isUser      ? 'rgba(74,155,184,0.07)'
+                  : isAssistant ? 'rgba(0,229,160,0.06)'
+                  : isSystem    ? 'rgba(251,191,36,0.06)'
+                  : 'rgba(255,255,255,0.03)'
+
+  const text = typeof content === 'string'
+    ? content
+    : Array.isArray(content)
+      ? content.map((p: unknown) => {
+          if (typeof p === 'string') return p
+          if (p && typeof p === 'object' && 'text' in (p as object)) return (p as { text: string }).text
+          return JSON.stringify(p)
+        }).join('')
+      : JSON.stringify(content, null, 2)
+
+  return (
+    <div className="ld-msg" style={{ borderLeftColor: roleColor, background: roleBg }}>
+      <div className="ld-msg-role" style={{ color: roleColor }}>
+        {role === 'user' ? <MessageSquare size={9} /> : role === 'assistant' ? <Bot size={9} /> : null}
+        {role}
+      </div>
+      <pre className="ld-msg-text">{text}</pre>
+    </div>
+  )
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -306,6 +342,77 @@ export function LogDetailSheet({ log, onClose }: Props) {
                     <span className="ld-cost-total-val">{formatCost(log.cost_usd)}</span>
                   </div>
                 </div>
+
+                {/* Model */}
+                {log.model && (
+                  <>
+                    <SectionLabel>Model</SectionLabel>
+                    <div className="ld-meta-card">
+                      <div className="ld-meta-row">
+                        <span className="ld-meta-icon"><Hash size={11} /></span>
+                        <span className="ld-meta-key">Model ID</span>
+                        <span className="ld-meta-val ld-mono">{log.model}</span>
+                      </div>
+                      {log.ttft_ms != null && (
+                        <>
+                          <div className="ld-meta-divider" />
+                          <div className="ld-meta-row">
+                            <span className="ld-meta-icon"><Zap size={11} /></span>
+                            <span className="ld-meta-key">TTFT</span>
+                            <span className="ld-meta-val ld-mono">{log.ttft_ms} ms</span>
+                          </div>
+                        </>
+                      )}
+                      {log.output_tps != null && (
+                        <>
+                          <div className="ld-meta-divider" />
+                          <div className="ld-meta-row">
+                            <span className="ld-meta-icon"><Activity size={11} /></span>
+                            <span className="ld-meta-key">Output TPS</span>
+                            <span className="ld-meta-val ld-mono">{log.output_tps?.toFixed(1)}</span>
+                          </div>
+                        </>
+                      )}
+                      {log.request_id && (
+                        <>
+                          <div className="ld-meta-divider" />
+                          <div className="ld-meta-row">
+                            <span className="ld-meta-icon"><Key size={11} /></span>
+                            <span className="ld-meta-key">Request ID</span>
+                            <span className="ld-meta-val ld-mono" style={{ fontSize: 10 }}>{log.request_id}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Prompt messages */}
+                {log.prompt && log.prompt.length > 0 && (
+                  <>
+                    <SectionLabel>Prompt ({log.prompt.length} message{log.prompt.length !== 1 ? 's' : ''})</SectionLabel>
+                    <div className="ld-prompt-list">
+                      {log.prompt.map((msg, i) => (
+                        <PromptMessage key={i} role={String(msg.role)} content={msg.content} />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Response */}
+                {log.response != null && (
+                  <>
+                    <SectionLabel>Response</SectionLabel>
+                    <div className="ld-response-block">
+                      <div className="ld-response-header">
+                        <Bot size={10} style={{ color: 'rgba(0,229,160,0.6)', flexShrink: 0 }} />
+                        <span className="ld-response-label">assistant</span>
+                        <span className="ld-response-chars">{log.response.length.toLocaleString()} chars</span>
+                      </div>
+                      <pre className="ld-response-text">{log.response}</pre>
+                    </div>
+                  </>
+                )}
 
                 <div style={{ height: 32 }} />
               </div>
@@ -643,4 +750,68 @@ const CSS = `
   color: rgba(255,255,255,0.92); font-family: var(--mono);
   letter-spacing: -0.5px;
 }
+
+/* ── Prompt messages ────────────────────────────────────────────── */
+.ld-prompt-list {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.ld-msg {
+  border-left: 2px solid;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+.ld-msg-role {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  font-family: var(--mono);
+  margin-bottom: 6px;
+}
+.ld-msg-text {
+  font-family: var(--mono); font-size: 11px;
+  color: rgba(255,255,255,0.65); line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word;
+  margin: 0; max-height: 200px; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.07) transparent;
+}
+.ld-msg-text::-webkit-scrollbar { width: 3px; }
+.ld-msg-text::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 2px; }
+
+/* ── Response block ─────────────────────────────────────────────── */
+.ld-response-block {
+  background: rgba(0,229,160,0.04);
+  border: 1px solid rgba(0,229,160,0.12);
+  border-left: 2px solid rgba(0,229,160,0.45);
+  border-radius: 0 8px 8px 0;
+  overflow: hidden;
+}
+.ld-response-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0,229,160,0.08);
+  background: rgba(0,229,160,0.03);
+}
+.ld-response-label {
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: rgba(0,229,160,0.6); font-family: var(--mono);
+  flex: 1;
+}
+.ld-response-chars {
+  font-size: 9px; color: rgba(255,255,255,0.2);
+  font-family: var(--mono);
+}
+.ld-response-text {
+  font-family: var(--mono); font-size: 11px;
+  color: rgba(255,255,255,0.7); line-height: 1.65;
+  white-space: pre-wrap; word-break: break-word;
+  margin: 0; padding: 12px;
+  max-height: 320px; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.07) transparent;
+}
+.ld-response-text::-webkit-scrollbar { width: 3px; }
+.ld-response-text::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
 `
