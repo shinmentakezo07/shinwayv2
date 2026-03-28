@@ -16,6 +16,8 @@ from tools.coerce import _coerce_value, _fuzzy_match_param
 
 log = structlog.get_logger()
 
+_SENTINEL = object()  # distinguishes "no default declared" from default=None
+
 
 def repair_tool_call(
     call: dict,
@@ -99,36 +101,41 @@ def repair_tool_call(
                 repaired_args[key], known_props[key], key, repairs
             )
 
-    # Pass 3 — fill missing required params with type-appropriate fallback.
-    # String params with no enum are NOT filled — fabricating an empty string
-    # for a param like 'command' or 'path' would silently run destructive ops.
+    # Pass 3 — fill missing required params.
+    # Priority: (1) explicit schema default, (2) type-appropriate safe fallback.
+    # String params with NO default and NO enum are left UNFILLABLE to prevent
+    # fabricating empty destructive values (e.g. empty 'command', empty 'path').
     for req in required:
         if req not in repaired_args:
             prop_schema = known_props.get(req, {})
             prop_type = prop_schema.get("type", "string")
-            enum_vals = prop_schema.get("enum")
-            if enum_vals:
-                fallback = enum_vals[0]  # use first enum value
-                repairs.append(f"filled missing required '{req}' with first enum value '{fallback}'")
+            explicit_default = prop_schema.get("default", _SENTINEL)
+
+            if explicit_default is not _SENTINEL:
+                coerced_default = _coerce_value(explicit_default, prop_schema, req, repairs)
+                repaired_args[req] = coerced_default
+                repairs.append(f"filled missing required '{req}' with schema default {coerced_default!r}")
+            elif prop_schema.get("enum"):
+                fallback = prop_schema["enum"][0]
+                repaired_args[req] = fallback
+                repairs.append(f"filled missing required '{req}' with first enum value {fallback!r}")
             elif prop_type == "array":
-                fallback = []
+                repaired_args[req] = []
                 repairs.append(f"filled missing required '{req}' with []")
             elif prop_type == "object":
-                fallback = {}
+                repaired_args[req] = {}
                 repairs.append(f"filled missing required '{req}' with {{}}")
             elif prop_type == "boolean":
-                fallback = False
+                repaired_args[req] = False
                 repairs.append(f"filled missing required '{req}' with false")
-            elif prop_type == "number" or prop_type == "integer":
-                fallback = 0
+            elif prop_type in ("number", "integer"):
+                repaired_args[req] = 0
                 repairs.append(f"filled missing required '{req}' with 0")
             else:
                 # Cannot safely fabricate a string value for an unknown required param —
                 # empty string is dangerous (e.g. empty 'command' runs bare shell, empty
                 # 'path' writes to cwd). Mark as unfillable; validation will drop the call.
                 repairs.append(f"UNFILLABLE: missing required string '{req}' has no safe default")
-                continue
-            repaired_args[req] = fallback
 
     if not repairs:
         return call, []

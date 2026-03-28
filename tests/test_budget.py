@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from tools.budget import limit_tool_calls, repair_invalid_calls, deduplicate_tool_calls
+from tools.budget import limit_tool_calls, repair_invalid_calls, deduplicate_tool_calls, sort_calls_by_schema_order
 
 
 def _tool(name: str, **props) -> dict:
@@ -105,3 +105,49 @@ def test_dedup_empty_list():
 def test_dedup_single_call_unchanged():
     c = {"id": "call_1", "type": "function", "function": {"name": "Bash", "arguments": '{"command": "ls"}'}}
     assert deduplicate_tool_calls([c]) == [c]
+
+
+# ── sort_calls_by_schema_order ────────────────────────────────────────────────
+
+_SORT_TOOLS = [
+    {"type": "function", "function": {"name": "Read", "parameters": {}}},
+    {"type": "function", "function": {"name": "Write", "parameters": {}}},
+    {"type": "function", "function": {"name": "Bash", "parameters": {}}},
+]
+
+
+def _sort_call(name: str) -> dict:
+    return {"id": f"c_{name}", "type": "function",
+            "function": {"name": name, "arguments": "{}"}}
+
+
+def test_sort_respects_schema_order() -> None:
+    calls = [_sort_call("Bash"), _sort_call("Read"), _sort_call("Write")]
+    result = sort_calls_by_schema_order(calls, _SORT_TOOLS)
+    names = [c["function"]["name"] for c in result]
+    assert names == ["Read", "Write", "Bash"]
+
+
+def test_sort_unknown_tool_goes_last() -> None:
+    calls = [_sort_call("Unknown"), _sort_call("Read")]
+    result = sort_calls_by_schema_order(calls, _SORT_TOOLS)
+    names = [c["function"]["name"] for c in result]
+    assert names[0] == "Read"
+    assert names[-1] == "Unknown"
+
+
+def test_sort_empty_calls() -> None:
+    assert sort_calls_by_schema_order([], _SORT_TOOLS) == []
+
+
+def test_sort_empty_tools() -> None:
+    calls = [_sort_call("Bash")]
+    result = sort_calls_by_schema_order(calls, [])
+    assert result == calls
+
+
+def test_sort_does_not_mutate_input() -> None:
+    calls = [_sort_call("Bash"), _sort_call("Read")]
+    original = [c["function"]["name"] for c in calls]
+    sort_calls_by_schema_order(calls, _SORT_TOOLS)
+    assert [c["function"]["name"] for c in calls] == original

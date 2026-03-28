@@ -1,7 +1,9 @@
 import json
+import pytest
 import requests
 import time
 
+@pytest.mark.integration
 def test_full_agent_tools():
     import os
     port = os.environ.get("PORT", "4002")

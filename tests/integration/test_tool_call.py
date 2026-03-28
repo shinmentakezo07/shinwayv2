@@ -9,6 +9,7 @@ def client():
     return TestClient(create_app())
 
 
+@pytest.mark.integration
 def test_tool_call(client):
     headers = {
         "Authorization": "Bearer 123",

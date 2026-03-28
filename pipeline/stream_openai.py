@@ -21,6 +21,7 @@ from pipeline.params import PipelineParams
 from tools.budget import deduplicate_tool_calls as _deduplicate_tool_calls
 from tools.budget import limit_tool_calls as _limit_tool_calls
 from tools.budget import repair_invalid_calls as _repair_invalid_calls
+from tools.budget import sort_calls_by_schema_order as _sort_calls
 from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter
 from tools.parse import _find_marker_pos, log_tool_calls
 from tools.registry import ToolRegistry
@@ -28,6 +29,18 @@ import utils.stream_monitor as _stream_monitor_mod
 
 
 log = structlog.get_logger()
+
+_MAX_TOOL_RETRY_DEPTH = 4  # absolute ceiling regardless of SHINWAY_RETRY_ATTEMPTS
+
+
+def _tool_choice_requires_call(tool_choice) -> bool:
+    """Return True when the client mandates at least one tool call."""
+    if tool_choice in ("required", "any"):
+        return True
+    if isinstance(tool_choice, dict):
+        return tool_choice.get("type") in ("any", "function", "tool")
+    return False
+
 
 _TOOL_MARKER = "[assistant_tool_calls]"
 _TOOL_MARKER_PREFIXES: frozenset[str] = frozenset(
@@ -94,6 +107,7 @@ async def _openai_stream(
     client: CursorClient,
     params: PipelineParams,
     anthropic_tools: list[dict] | None,
+    _retry_count: int = 0,
 ) -> AsyncIterator[str]:
     """Generate OpenAI SSE chunks from Cursor stream."""
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -282,10 +296,34 @@ async def _openai_stream(
                 log_tool_calls(final_calls, context="openai_stream_finish", request_id=params.request_id)
                 final_calls = _repair_invalid_calls(final_calls, params.tools)
                 final_calls = _deduplicate_tool_calls(final_calls)
+                final_calls = _sort_calls(final_calls, params.tools)
                 for chunk in tool_emitter.emit(final_calls):
                     yield chunk
                 finish_reason = "tool_calls"
             else:
+                # tool_choice=required but no calls were parsed — retry with a nudge
+                if (
+                    params.tools
+                    and _tool_choice_requires_call(params.tool_choice)
+                    and not final_calls
+                    and _retry_count < min(settings.retry_attempts, _MAX_TOOL_RETRY_DEPTH)
+                ):
+                    from pipeline.suppress import _with_appended_cursor_message, _msg
+                    retry_params = _with_appended_cursor_message(
+                        params,
+                        _msg(
+                            "user",
+                            "This request needs a tool call. Please respond using the "
+                            "[assistant_tool_calls] JSON format with one of the session tools.",
+                        ),
+                    )
+                    async for chunk in _openai_stream(
+                        client, retry_params, anthropic_tools,
+                        _retry_count=_retry_count + 1,
+                    ):
+                        yield chunk
+                    return
+
                 # Genuine text response — extract any remaining visible content
                 thinking_text, visible, _ = _extract_visible_content(
                     acc, params.show_reasoning
