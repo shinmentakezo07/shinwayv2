@@ -5561,3 +5561,26 @@ Comprehensive wiring and dead-code audit of all 6 new pipeline modules added acr
 | SHA | Description |
 |---|---|
 | 3a58b78c | test(converters): unit tests for to_responses.py and from_responses.py |
+
+## Session 162 — Prompt & Response Logging (2026-03-28)
+
+### Files Modified
+- `analytics.py` — `RequestLog`: added `prompt`, `response`, `request_id` fields; ring buffer entry now includes `model`, `ttft_ms`, `output_tps`, `request_id`, `prompt`, `response`
+- `config.py` — added `prompt_logging_enabled` (default `False`, env `SHINWAY_PROMPT_LOGGING`) and `prompt_logging_max_response_chars` (default 8000, env `SHINWAY_PROMPT_LOGGING_MAX_RESPONSE_CHARS`)
+- `runtime_config.py` — added `prompt_logging_enabled` and `prompt_logging_max_response_chars` to `OVERRIDABLE_KEYS` (live-toggle via Admin UI)
+- `pipeline/record.py:_record` — captures `params.messages` as `prompt` and response `text` (truncated to `max_response_chars`) when `prompt_logging_enabled=True`; always passes `request_id`
+- `admin-ui/lib/types.ts:LogEntry` — added `model`, `ttft_ms`, `output_tps`, `request_id`, `prompt`, `response` optional fields
+- `admin-ui/components/logs/LogsTable.tsx` — added Model column (short display name, full name as tooltip); colSpan updated to 9
+- `admin-ui/components/logs/LogDetailSheet.tsx` — added Model/TTFT/TPS/Request ID metadata card; `PromptMessage` component renders each message with role-coloured left border; Response block renders assistant output in scrollable pre with green accent; all sections only render when data is present
+
+### Why
+- User requested ability to inspect actual prompts and responses in the logs UI
+- Disabled by default (`SHINWAY_PROMPT_LOGGING=false`) — enable per-deployment; prompts may contain sensitive data
+- Response capped at 8000 chars to prevent memory bloat in the in-process ring buffer
+- Live-togglable via `PATCH /v1/internal/config/prompt_logging_enabled` without restart
+
+### Commit SHAs
+
+| SHA | Description |
+|---|
+| 3ea2765f | feat(logs): prompt & response capture — store messages+output in analytics ring buffer, expose in logs UI |
