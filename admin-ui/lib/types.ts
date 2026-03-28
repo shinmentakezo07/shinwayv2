@@ -98,6 +98,31 @@ export interface ModelsResponse {
   data: ModelEntry[]
 }
 
+export interface PromptLogEntry {
+  id: number
+  ts: number
+  request_id: string
+  api_key: string
+  provider: string
+  model: string
+  input_tokens: number
+  output_tokens: number
+  latency_ms: number
+  ttft_ms: number | null
+  cache_hit: boolean
+  cost_usd: number
+  prompt: Array<{ role: string; content: string | unknown }>
+  response: string
+}
+
+export interface PromptLogsResponse {
+  total: number
+  count: number
+  limit: number
+  offset: number
+  logs: PromptLogEntry[]
+}
+
 // Client-side derived metrics
 export interface WindowMetrics {
   tps: number

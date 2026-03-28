@@ -53,6 +53,8 @@ async def _record(
         max_chars = settings.prompt_logging_max_response_chars
         response_data = text[:max_chars] + "…" if len(text) > max_chars else text
 
+    import time as _time
+    log_ts = _time.time()
     await analytics.record(
         RequestLog(
             api_key=params.api_key,
@@ -70,6 +72,24 @@ async def _record(
             response=response_data,
         )
     )
+    # Always write to persistent prompt log store (prompt/response only when enabled)
+    from storage.prompt_logs import prompt_log_store
+    if prompt_log_store._db is not None:
+        await prompt_log_store.insert(
+            ts=log_ts,
+            request_id=params.request_id,
+            api_key=params.api_key,
+            provider=provider,
+            model=params.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=effective_latency,
+            ttft_ms=effective_ttft,
+            cache_hit=cache_hit,
+            cost_usd=cost,
+            prompt=prompt_data if prompt_data is not None else [],
+            response=response_data if response_data is not None else "",
+        )
     if settings.quota_enabled and params.api_key:
         from middleware.quota import record_quota_usage
         await record_quota_usage(params.api_key, tokens=input_tokens + output_tokens)

@@ -76,6 +76,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     from storage.webhooks import webhook_store
     await webhook_store.init()
     log.info("webhook_store_started")
+    from storage.prompt_logs import prompt_log_store
+    prompt_log_store._max_rows = settings.prompt_log_max_rows
+    await prompt_log_store.init()
+    log.info("prompt_log_store_started")
 
     try:
         yield
@@ -92,6 +96,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from storage.webhooks import webhook_store
         await webhook_store.close()
         log.info("webhook_store_closed")
+        from storage.prompt_logs import prompt_log_store
+        await prompt_log_store.close()
+        log.info("prompt_log_store_closed")
         await response_store.close()
         log.info("response_store_closed")
         await _http_client.aclose()

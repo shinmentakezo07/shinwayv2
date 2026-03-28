@@ -126,6 +126,101 @@ async def request_logs(
     return {"count": len(logs), "limit": limit, "logs": logs}
 
 
+# ── Persistent prompt logs ───────────────────────────────────────────────────
+
+@router.get("/v1/internal/prompt-logs")
+async def list_prompt_logs(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    api_key: str | None = Query(default=None),
+    provider: str | None = Query(default=None),
+    model: str | None = Query(default=None),
+    since_ts: int | None = Query(default=None),
+    until_ts: int | None = Query(default=None),
+    search: str | None = Query(default=None),
+    authorization: str | None = Header(default=None),
+):
+    """Return paginated persistent prompt/response log entries.
+
+    Supports filtering by api_key, provider, model, time range, and full-text search
+    across prompt + response content. Results ordered newest-first.
+    """
+    await verify_bearer(authorization)
+    from storage.prompt_logs import prompt_log_store
+    rows, total = await prompt_log_store.query(
+        limit=limit,
+        offset=offset,
+        api_key=api_key or None,
+        provider=provider or None,
+        model=model or None,
+        since_ts=since_ts,
+        until_ts=until_ts,
+        search=search or None,
+    )
+    return {
+        "total": total,
+        "count": len(rows),
+        "limit": limit,
+        "offset": offset,
+        "logs": rows,
+    }
+
+
+@router.get("/v1/internal/prompt-logs/{log_id}")
+async def get_prompt_log(
+    log_id: int,
+    authorization: str | None = Header(default=None),
+):
+    """Fetch a single prompt log entry by ID."""
+    await verify_bearer(authorization)
+    from storage.prompt_logs import prompt_log_store
+    entry = await prompt_log_store.get(log_id)
+    if entry is None:
+        return JSONResponse(status_code=404, content={"error": "Log entry not found"})
+    return entry
+
+
+@router.delete("/v1/internal/prompt-logs/{log_id}")
+async def delete_prompt_log(
+    log_id: int,
+    authorization: str | None = Header(default=None),
+):
+    """Delete a single prompt log entry by ID."""
+    await verify_bearer(authorization)
+    from storage.prompt_logs import prompt_log_store
+    deleted = await prompt_log_store.delete(log_id)
+    if not deleted:
+        return JSONResponse(status_code=404, content={"error": "Log entry not found"})
+    return {"ok": True, "deleted": log_id}
+
+
+@router.delete("/v1/internal/prompt-logs")
+async def clear_prompt_logs(
+    authorization: str | None = Header(default=None),
+):
+    """Delete ALL prompt log entries. Irreversible."""
+    await verify_bearer(authorization)
+    from storage.prompt_logs import prompt_log_store
+    count = await prompt_log_store.clear_all()
+    return {"ok": True, "deleted": count}
+
+
+@router.get("/v1/internal/prompt-logs/stats")
+async def prompt_log_stats(
+    authorization: str | None = Header(default=None),
+):
+    """Return row count and store config."""
+    await verify_bearer(authorization)
+    from storage.prompt_logs import prompt_log_store
+    _, total = await prompt_log_store.query(limit=1, offset=0)
+    return {
+        "total_rows": total,
+        "max_rows": prompt_log_store._max_rows,
+        "db_path": prompt_log_store._db_path,
+        "store_ready": prompt_log_store._db is not None,
+    }
+
+
 # ── Idempotency ──────────────────────────────────────────────────────────────
 
 @router.delete("/v1/internal/idempotency/{idem_key}")
