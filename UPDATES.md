@@ -5584,3 +5584,30 @@ Comprehensive wiring and dead-code audit of all 6 new pipeline modules added acr
 | SHA | Description |
 |---|
 | 3ea2765f | feat(logs): prompt & response capture — store messages+output in analytics ring buffer, expose in logs UI |
+
+## Session 163 — Persistent Prompt & Response Log Store (2026-03-28)
+
+### Files Added
+- `storage/prompt_logs.py` — `PromptLogStore`: SQLite-backed persistent store (`prompt_logs.db`). Schema: id, ts, request_id, api_key, provider, model, input/output tokens, latency_ms, ttft_ms, cache_hit, cost_usd, prompt (JSON), response (TEXT). WAL mode, NORMAL sync, 8MB page cache. Indexed on ts, api_key, model, provider. Auto-prunes oldest rows beyond `max_rows` (default 50,000) every 500 inserts. Full query API: `query()` with limit/offset/api_key/provider/model/since_ts/until_ts/search filters, `get()`, `delete()`, `clear_all()`.
+- `admin-ui/app/api/prompt-logs/route.ts` — Next.js GET/DELETE proxy route to `/v1/internal/prompt-logs`. Fans out to all instances, returns first successful result.
+- `admin-ui/hooks/usePromptLogs.ts` — SWR hook with 2s refresh. Supports all filter params. Returns logs, total, count.
+
+### Files Modified
+- `storage/prompt_logs.py` — new file (see above)
+- `app.py:_lifespan` — init/close `prompt_log_store` in startup/shutdown sequence
+- `pipeline/record.py:_record` — always writes to `prompt_log_store` when store is ready; prompt/response fields populated only when `prompt_logging_enabled=True`
+- `routers/internal.py` — added 5 endpoints: `GET /v1/internal/prompt-logs` (paginated, filterable), `GET /v1/internal/prompt-logs/{id}`, `DELETE /v1/internal/prompt-logs/{id}`, `DELETE /v1/internal/prompt-logs` (clear all), `GET /v1/internal/prompt-logs/stats`
+- `config.py` — added `SHINWAY_PROMPT_LOG_MAX_ROWS` (default 50,000)
+- `admin-ui/lib/types.ts` — added `PromptLogEntry` and `PromptLogsResponse` interfaces
+
+### Why
+- In-memory ring buffer (200 entries, resets on restart) was insufficient for full audit trail
+- Persistent SQLite store survives restarts, supports full-text search across prompt+response, and scales to 50K entries before auto-pruning
+- Per-entry metadata (model, ttft_ms, request_id) enables per-model cost/latency breakdown queries
+- DELETE endpoints allow GDPR-style individual entry or full purge
+
+### Commit SHAs
+
+| SHA | Description |
+|---|
+| 88dc264a | feat(logs): persistent prompt/response SQLite store — PromptLogStore, /v1/internal/prompt-logs CRUD, Next.js proxy route, usePromptLogs hook |
