@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from config import settings
 from tools.score import _find_marker_pos
 
 if TYPE_CHECKING:
@@ -111,7 +112,6 @@ class StreamingToolCallParser:
 
         # Phase 4: walk only NEW characters added by this chunk
         if self._json_start >= 0:
-            from config import settings
             if len(self.buf) - self._json_start > settings.max_tool_payload_bytes:
                 import structlog as _sl
                 _sl.get_logger().warning(
