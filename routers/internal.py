@@ -25,7 +25,7 @@ from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from runtime_config import OVERRIDABLE_KEYS, OverrideError, runtime_config
+from runtime_config import OverrideError, runtime_config
 
 from analytics import analytics
 from app import get_http_client
@@ -141,7 +141,6 @@ async def release_idempotency_lock(
     """
     await verify_bearer(authorization)
     from middleware.idempotency import release
-    from middleware.auth import verify_bearer as _vb
 
     await release(idem_key, api_key="")
     log.info("idempotency_lock_released", idem_key=idem_key[:32])

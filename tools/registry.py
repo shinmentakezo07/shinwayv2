@@ -6,18 +6,15 @@ Replaces per-call rebuilding of allowed_exact / schema_map in parse.py.
 """
 from __future__ import annotations
 
-import re
 from copy import deepcopy
 
 import structlog
 
 from tools.coerce import _fuzzy_match_param
+from tools.results import _normalize_name
 
 log = structlog.get_logger()
 
-
-def _normalize_name(name: str) -> str:
-    return re.sub(r"[-_\s]", "", (name or "").lower())
 
 
 _CURSOR_BACKEND_TOOLS: dict[str, set[str]] = {
