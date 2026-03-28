@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from cursor.client import (
@@ -19,8 +20,13 @@ from cursor.client import (
     _build_payload,
     classify_cursor_error,
 )
+from cursor.metrics import cursor_metrics
 from cursor.credentials import CredentialInfo
-from handlers import BackendError, CredentialError, RateLimitError
+from handlers import BackendError, CredentialError, RateLimitError, TimeoutError
+
+
+def setup_function():
+    cursor_metrics.reset()
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -192,16 +198,19 @@ def test_classify_999_returns_backend_error():
 
 async def test_client_call_returns_concatenated_deltas():
     """stream() yields deltas; call() joins them into a single string."""
-    pool = _make_pool()
+    cred = CredentialInfo(cookie="cookie", index=7)
+    pool = _make_pool(cred)
     mock_http = MagicMock()
     mock_http.stream = MagicMock(return_value=_make_stream_response(["hello", " world"]))
 
     client = CursorClient(mock_http, pool=pool)
-    # Patch asyncio.create_task to avoid background task side-effects
     with patch("cursor.client.asyncio.create_task"):
         result = await client.call([{"role": "user", "content": "hi"}], "claude-3")
 
+    metrics = cursor_metrics.snapshot()
     assert result == "hello world"
+    assert metrics["counts"]["client_attempt_selected|index=7"] == 1
+    assert metrics["counts"]["client_stream_success|index=7"] == 1
 
 
 async def test_client_call_empty_model_raises():
@@ -268,6 +277,43 @@ async def test_client_call_collects_all_chunks():
         result = await client.call([{"role": "user", "content": "hi"}], "claude-3")
 
     assert result == "chunk1chunk2chunk3"
+
+
+async def test_client_stream_timeout_records_retry_metrics():
+    cred = CredentialInfo(cookie="cookie", index=5)
+    pool = _make_pool(cred)
+    mock_http = MagicMock()
+    mock_http.stream = MagicMock(side_effect=httpx.ReadTimeout("boom"))
+
+    client = CursorClient(mock_http, pool=pool)
+
+    with patch("cursor.client.asyncio.create_task"):
+        with patch("cursor.client.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(TimeoutError):
+                async for _ in client.stream([{"role": "user", "content": "hi"}], "claude-3"):
+                    pass
+
+    metrics = cursor_metrics.snapshot()
+    assert metrics["counts"]["client_attempt_selected|index=5"] >= 1
+    assert metrics["counts"]["client_stream_error|index=5|kind=timeout"] >= 1
+    assert metrics["counts"]["client_retry_scheduled|kind=timeout"] >= 1
+
+
+async def test_client_stream_records_latency_gauges():
+    cred = CredentialInfo(cookie="cookie", index=9)
+    pool = _make_pool(cred)
+    mock_http = MagicMock()
+    mock_http.stream = MagicMock(return_value=_make_stream_response(["ok"]))
+
+    client = CursorClient(mock_http, pool=pool)
+    with patch("cursor.client.asyncio.create_task"):
+        result = await client.call([{"role": "user", "content": "hi"}], "claude-3")
+
+    metrics = cursor_metrics.snapshot()
+    assert result == "ok"
+    assert metrics["gauges"]["client_stream_last_latency_ms|index=9"] >= 0.0
+    pool.mark_success.assert_called_once()
+    assert pool.mark_success.call_args.kwargs["latency_ms"] >= 0.0
 
 
 # ── Bug 3: EmptyResponseError retry ───────────────────────────────────────────

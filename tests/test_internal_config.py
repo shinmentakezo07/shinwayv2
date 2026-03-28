@@ -30,6 +30,7 @@ def test_get_config_returns_all_keys(client):
     assert resp.status_code == 200
     data = resp.json()
     assert "cache_ttl_seconds" in data
+    assert "cursor_selection_strategy" in data
     assert "overridden" in data["cache_ttl_seconds"]
     assert "value" in data["cache_ttl_seconds"]
     assert "default" in data["cache_ttl_seconds"]
@@ -82,16 +83,11 @@ def test_delete_config_key_resets_override(client):
 
 
 def test_post_credentials_add(client, monkeypatch):
-    added_cookies = []
+    class FakeService:
+        def add_cookie(self, cookie):
+            return True, {"ok": True, "added": True, "pool_size": 2}
 
-    class FakePool:
-        size = 2
-
-        def add(self, cookie):
-            added_cookies.append(cookie)
-            return True
-
-    monkeypatch.setattr("cursor.credentials.credential_pool", FakePool())
+    monkeypatch.setattr("cursor.credentials.credential_service", FakeService())
 
     resp = client.post(
         "/v1/internal/credentials/add",
@@ -103,13 +99,11 @@ def test_post_credentials_add(client, monkeypatch):
 
 
 def test_post_credentials_add_duplicate_returns_409(client, monkeypatch):
-    class FakePool:
-        size = 1
+    class FakeService:
+        def add_cookie(self, cookie):
+            return False, {"error": "cookie already in pool or pool at maximum (15)"}
 
-        def add(self, cookie):
-            return False
-
-    monkeypatch.setattr("cursor.credentials.credential_pool", FakePool())
+    monkeypatch.setattr("cursor.credentials.credential_service", FakeService())
 
     resp = client.post(
         "/v1/internal/credentials/add",

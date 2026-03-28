@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     retry_backoff_seconds: float = Field(
         default=0.6, alias="SHINWAY_RETRY_BACKOFF_SECONDS"
     )
+    cursor_selection_strategy: str = Field(
+        default="round_robin", alias="SHINWAY_CURSOR_SELECTION_STRATEGY"
+    )
 
     # ── Cache ───────────────────────────────────────────────────────────────
     cache_enabled: bool = Field(default=True, alias="SHINWAY_CACHE_ENABLED")

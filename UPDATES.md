@@ -5091,3 +5091,159 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | SHA | Description |
 |---|---|
 | `2adefc90` | feat: 7 enhancements |
+
+## Session 155 — cursor package safe refactor + admin decoupling (2026-03-28)
+
+### What changed
+- `cursor/credential_models.py` — created
+- `cursor/credential_parsing.py` — created
+- `cursor/credential_headers.py` — created
+- `cursor/credential_pool.py` — created
+- `cursor/request_headers.py` — created
+- `cursor/payloads.py` — created
+- `cursor/retry.py` — created
+- `cursor/telemetry.py` — created
+- `cursor/client.py` — refactored to delegate header/payload/retry/telemetry logic to helper modules while preserving compatibility exports
+- `cursor/credentials.py` — replaced with a compatibility shim that re-exports the credential models/helpers/pool
+- `routers/internal.py` — updated credential validation route to use a public credential-pool accessor instead of private state
+- `tests/test_credentials.py` — updated imports to target the new credential modules
+- `tests/test_internal.py` — added coverage for `/v1/internal/credentials/me` through the public pool accessor
+
+### Which lines / functions
+- `cursor/credential_models.py:CircuitBreaker`, `CredentialInfo` — extracted credential state dataclasses
+- `cursor/credential_parsing.py:extract_workos_id`, `stable_uuid`, `merge_cookie`, `parse_cookies` — extracted cookie parsing and stable fingerprint helpers
+- `cursor/credential_headers.py:make_datadog_request_headers`, `build_auth_headers`, `build_request_headers` — extracted auth/cookie/tracing header logic
+- `cursor/credential_pool.py:CredentialPool` — extracted pool loading, rotation, health tracking, snapshotting, add/reset logic; added `list_credentials()` public accessor
+- `cursor/request_headers.py:build_headers` — extracted static browser-like upstream header construction
+- `cursor/payloads.py:build_payload` — extracted Cursor `/api/chat` payload builder
+- `cursor/retry.py:retry_exception_delay` — centralized retry wait calculation helper
+- `cursor/telemetry.py:send_telemetry` — extracted fire-and-forget telemetry POST logic
+- `cursor/client.py:_build_headers`, `_build_payload`, `classify_cursor_error`, `CursorClient.stream`, `CursorClient.auth_me` — rewired to use the extracted helpers and preserved compatibility imports for existing tests
+- `cursor/credentials.py` — now re-exports `CredentialPool`, `CredentialInfo`, `CircuitBreaker`, `credential_pool`, and legacy helper names
+- `routers/internal.py:credential_me` — replaced `credential_pool._creds` access with `credential_pool.list_credentials()`
+- `tests/test_internal.py:test_internal_credentials_me_uses_public_pool_accessor` — added regression coverage for admin credential iteration through the public accessor
+- `tests/test_credentials.py` — switched to `cursor.credential_models` / `cursor.credential_pool` imports and preserved existing pool behavior assertions
+
+### Why
+- `cursor/client.py` and `cursor/credentials.py` were carrying too many responsibilities at once, which made the transport layer harder to test and evolve safely
+- `routers/internal.py` depended on the private `credential_pool._creds` attribute, which made the admin surface tightly coupled to the credential implementation internals
+- The goal of this refactor was to preserve behavior while creating clear seams for future reliability/performance work and improving logging consistency around the `cursor/` package
+- A follow-up regression appeared in `tests/test_stream_openai_fixes.py` because existing tests patched `cursor.client.runtime_config`; compatibility import support was restored so the safe refactor does not break that contract
+
+### Validation
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_cursor_client.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_credentials.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_internal.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_sse.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_stream_openai_fixes.py::test_cursor_client_rotates_cred_on_empty_response -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests --ignore=/teamspace/studios/this_studio/dikders/tests/integration -v` → 1058 passed
+- `python3 -m mypy ...` on the touched files surfaced repository-wide pre-existing typing issues outside this refactor (for example `cache.py`, `middleware/auth.py`, `tools/parse.py`, `pipeline/stream_openai.py`), plus one compatible typed-dict warning in `cursor/client.py`
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| _(not committed)_ | Safe `cursor/` refactor, public credential accessor, and regression test updates |
+
+## Session 156 — cursor service/policy/selection/metrics layer (2026-03-28)
+
+### What changed
+- `cursor/health_policy.py` — created
+- `cursor/selection.py` — created
+- `cursor/metrics.py` — created
+- `cursor/events.py` — created
+- `cursor/credential_service.py` — created
+- `cursor/credential_pool.py` — refactored to delegate health transitions and selection decisions to dedicated helpers, and to emit metrics/events
+- `cursor/client.py` — instrumented retries, stream outcomes, and `auth_me` validation paths with cursor metrics/events while keeping transport behavior unchanged
+- `cursor/credentials.py` — widened compatibility exports to include the credential service and metrics singleton
+- `routers/internal.py` — moved readiness/credential status/reset/validation/add flows onto the new credential service layer
+- `tests/test_credentials.py` — added health-policy and selection regression coverage
+- `tests/test_cursor_client.py` — added metric-oriented regression coverage for timeout retry behavior and successful stream selection/success counters
+- `tests/test_internal.py` — updated credential endpoint tests to mock the service layer rather than pool internals; added reset delegation coverage
+- `tests/test_internal_config.py` — updated credential-add route tests to use the service abstraction
+
+### Which lines / functions
+- `cursor/health_policy.py:recover_if_ready`, `apply_error`, `apply_success`, `reset_credential`, `is_selectable` — codified existing cooldown and unhealthy-state rules without changing defaults
+- `cursor/selection.py:SelectionState`, `SelectionResult`, `select_credential` — codified the current grouped round-robin selection strategy (3 calls per credential)
+- `cursor/metrics.py:CursorMetrics`, `cursor_metrics` — added in-memory admin-safe counters for selection, retry, validation, recovery, and add/reset events
+- `cursor/events.py:log_credential_selected`, `log_credential_skipped`, `log_credential_recovered`, `log_retry_scheduled`, `log_validation_result`, `log_pool_add*` — centralized structured event emission
+- `cursor/credential_service.py:CredentialService.readiness_status`, `list_status`, `reset_all`, `validate_all`, `add_cookie` — created the public service layer for internal/admin credential operations
+- `cursor/credential_pool.py:CredentialPool.next`, `mark_error`, `mark_success`, `_reset_all_unsafe`, `add` — now use `health_policy`, `selection`, `metrics`, and `events` helpers while preserving the prior default behavior
+- `cursor/client.py:CursorClient.stream` — now records safe metrics for credential selection, timeout/connect/rate-limit/empty-response retries, and successful streams
+- `cursor/client.py:CursorClient.auth_me` — now records validation success/failure metrics/events without changing the HTTP semantics
+- `cursor/credentials.py` — now re-exports `CredentialService`, `credential_service`, and `cursor_metrics` alongside the existing compatibility surface
+- `routers/internal.py:readiness`, `credential_status`, `credential_reset`, `credential_me`, `credential_add` — now delegate to `credential_service` instead of direct pool management
+- `tests/test_credentials.py:test_health_policy_error_and_recovery_cycle`, `test_selection_preserves_grouped_round_robin` — added direct regression coverage for the new helper modules
+- `tests/test_cursor_client.py:test_client_call_returns_concatenated_deltas`, `test_client_stream_timeout_records_retry_metrics` — added metric assertions around successful and retrying stream paths
+- `tests/test_internal.py:test_internal_credentials_reset_uses_service`, `test_internal_credentials_me_uses_service` — added service-based route coverage
+- `tests/test_internal_config.py:test_post_credentials_add*` — switched route mocking from pool methods to `CredentialService.add_cookie`
+
+### Why
+- The previous refactor cleaned up file boundaries, but the credential logic still lacked explicit policy, selection, observability, and service layers
+- Internal/admin routes were still coordinating credential behavior directly, which kept router code more coupled to low-level credential machinery than necessary
+- This change creates stable extension seams for future routing and reliability work while keeping the current runtime selection and health semantics unchanged by default
+- Observability is now centralized and admin-safe, which makes future debugging and operational visibility easier without exposing cookies or auth material
+
+### Validation
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_credentials.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_cursor_client.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_internal.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_internal_config.py -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_cursor_client.py::test_client_stream_timeout_records_retry_metrics -v`
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_credentials.py /teamspace/studios/this_studio/dikders/tests/test_cursor_client.py /teamspace/studios/this_studio/dikders/tests/test_internal.py /teamspace/studios/this_studio/dikders/tests/test_internal_config.py -q` → 70 passed
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests --ignore=/teamspace/studios/this_studio/dikders/tests/integration -q` → 1062 passed
+- `python3 -m mypy ...` on touched files still surfaced pre-existing repository-wide type issues outside this work (for example `cache.py`, `middleware/auth.py`, `tools/parse.py`, `pipeline/stream_openai.py`, `app.py`); no new VS Code diagnostics remained in the touched files
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| _(not committed)_ | Added cursor service/policy/selection/metrics/events layer with full admin integration |
+
+## Session 157 — cursor metrics endpoint, latency tracking, and feature-flagged health-weighted selection (2026-03-28)
+
+### What changed
+- `config.py` — added `cursor_selection_strategy` setting
+- `runtime_config.py` — made `cursor_selection_strategy` runtime-overridable
+- `cursor/credential_models.py` — expanded credential state with success and latency tracking fields
+- `cursor/metrics.py` — added gauge support in addition to counters
+- `cursor/selection.py` — added feature-flagged `health_weighted` selection while preserving `round_robin` as the default
+- `cursor/health_policy.py` — extended success handling to capture latency and success timestamps
+- `cursor/credential_pool.py` — added latency-aware success recording, richer snapshot data, and active-strategy reporting
+- `cursor/credential_service.py` — added `metrics_status()` and exposed selection strategy in status responses
+- `cursor/client.py` — now records per-attempt latency gauges on successful streams and passes latency into pool success handling
+- `routers/internal.py` — added `/v1/internal/credentials/metrics`
+- `tests/test_credentials.py` — added health-weighted selection coverage and runtime-flag reset
+- `tests/test_cursor_client.py` — added latency-gauge coverage and updated metric snapshot assertions
+- `tests/test_internal.py` — added metrics-endpoint coverage and updated status-response expectations
+- `tests/test_internal_config.py` — updated config coverage to include the new runtime setting
+
+### Which lines / functions
+- `config.py:Settings.cursor_selection_strategy` — added `SHINWAY_CURSOR_SELECTION_STRATEGY` with default `round_robin`
+- `runtime_config.py:OVERRIDABLE_KEYS` — added `cursor_selection_strategy` so strategy can be changed at runtime
+- `cursor/credential_models.py:CredentialInfo` — added `success_count`, `last_success`, `last_latency_ms`, `latency_ms_total`, `avg_latency_ms`
+- `cursor/metrics.py:CursorMetrics.set_gauge`, `snapshot`, `reset` — added gauge storage and snapshot structure `{counts, gauges}`
+- `cursor/selection.py:_round_robin_selection`, `_health_weighted_selection`, `select_credential` — added strategy dispatch with runtime-config-backed feature flag
+- `cursor/health_policy.py:apply_success` — now records success timestamp and updates moving average latency from accumulated samples
+- `cursor/credential_pool.py:current_selection_strategy`, `mark_success`, `snapshot` — added latency-aware success path, richer pool snapshot fields, and active strategy reporting
+- `cursor/credential_service.py:list_status`, `metrics_status` — exposed strategy and metrics snapshot for internal/admin consumers
+- `cursor/client.py:CursorClient.stream` — added attempt timing and latency gauges (`client_stream_last_latency_ms`) and passed per-stream latency into `CredentialPool.mark_success`
+- `routers/internal.py:credential_metrics` — new route `GET /v1/internal/credentials/metrics`
+- `tests/test_credentials.py:test_selection_health_weighted_prefers_faster_credential` — added feature-flagged weighted-selection regression coverage
+- `tests/test_cursor_client.py:test_client_stream_records_latency_gauges` — added successful-stream latency coverage; updated existing metric assertions for new snapshot format
+- `tests/test_internal.py:test_internal_credentials_metrics_returns_snapshot` — added metrics endpoint coverage; updated credential-status test to assert `selection_strategy`
+- `tests/test_internal_config.py:test_get_config_returns_all_keys` — now asserts `cursor_selection_strategy` is exposed via runtime config API
+
+### Why
+- Metrics existed internally but were not accessible from the admin/internal API, limiting operational visibility
+- Credential selection had no safe extension point for latency-aware routing; the new feature flag allows experimentation without changing the default behavior
+- Per-credential latency tracking was needed so future health-based routing can use real performance data instead of only error counts
+- This change preserves current round-robin behavior by default while adding a production-safe path to observe and optionally enable smarter selection
+
+### Validation
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests/test_credentials.py /teamspace/studios/this_studio/dikders/tests/test_cursor_client.py /teamspace/studios/this_studio/dikders/tests/test_internal.py /teamspace/studios/this_studio/dikders/tests/test_internal_config.py -q` → 73 passed
+- `python3 -m pytest /teamspace/studios/this_studio/dikders/tests --ignore=/teamspace/studios/this_studio/dikders/tests/integration -q` → 1065 passed
+- `python3 -m mypy ...` on touched files still surfaced pre-existing repository-wide issues outside this change set (for example `tools/json_repair.py`, `storage/keys.py`, `cache.py`, `pipeline/stream_openai.py`, `app.py`); no new VS Code diagnostics remained in the touched files
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| _(not committed)_ | Added cursor metrics endpoint, latency tracking, and feature-flagged health-weighted selection |

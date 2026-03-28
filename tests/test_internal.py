@@ -105,10 +105,9 @@ def test_health_live_returns_200(client):
 def test_health_ready_returns_200(client, monkeypatch):
     """GET /health/ready returns 200 when credentials exist."""
     from types import SimpleNamespace
-    fake_pool = SimpleNamespace(size=1, snapshot=lambda: [])
-    monkeypatch.setattr("cursor.credentials.credential_pool", fake_pool)
+    fake_service = SimpleNamespace(readiness_status=lambda: {"ready": True, "credentials": 1})
+    monkeypatch.setattr("cursor.credentials.credential_service", fake_service)
     response = client.get("/health/ready")
-    # 200 if at least one credential; 503 if none — both are valid responses
     assert response.status_code in (200, 503)
 
 
@@ -128,13 +127,14 @@ def test_internal_stats_returns_dict(client, auth_headers, bypass_internal_auth,
 def test_internal_credentials_returns_pool_info(client, auth_headers, bypass_internal_auth, monkeypatch):
     """GET /v1/internal/credentials returns pool_size and credentials."""
     from types import SimpleNamespace
-    fake_pool = SimpleNamespace(size=2, snapshot=lambda: [{"index": 0}, {"index": 1}])
-    monkeypatch.setattr("cursor.credentials.credential_pool", fake_pool)
+    fake_service = SimpleNamespace(list_status=lambda: {"pool_size": 2, "selection_strategy": "round_robin", "credentials": [{"index": 0}, {"index": 1}]})
+    monkeypatch.setattr("cursor.credentials.credential_service", fake_service)
     response = client.get("/v1/internal/credentials", headers=auth_headers)
     assert response.status_code == 200
     body = response.json()
     assert "pool_size" in body
     assert body["pool_size"] == 2
+    assert body["selection_strategy"] == "round_robin"
 
 
 def test_internal_cache_clear_returns_counts(client, auth_headers, bypass_internal_auth, monkeypatch):
@@ -180,6 +180,82 @@ def test_missing_auth_returns_401(client):
     """GET /v1/internal/stats without Authorization header returns 401."""
     response = client.get("/v1/internal/stats")
     assert response.status_code == 401
+
+
+def test_internal_credentials_metrics_returns_snapshot(client, auth_headers, bypass_internal_auth, monkeypatch):
+    """GET /v1/internal/credentials/metrics returns strategy and metrics snapshot."""
+    from types import SimpleNamespace
+
+    fake_service = SimpleNamespace(
+        metrics_status=lambda: {
+            "selection_strategy": "health_weighted",
+            "pool_size": 2,
+            "metrics": {
+                "counts": {"credential_selected|index=0": 3},
+                "gauges": {"credential_avg_latency_ms|index=0": 120.0},
+            },
+        }
+    )
+    monkeypatch.setattr("cursor.credentials.credential_service", fake_service)
+
+    response = client.get("/v1/internal/credentials/metrics", headers=auth_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selection_strategy"] == "health_weighted"
+    assert body["pool_size"] == 2
+    assert "counts" in body["metrics"]
+    assert "gauges" in body["metrics"]
+
+
+def test_internal_credentials_reset_uses_service(client, auth_headers, bypass_internal_auth, monkeypatch):
+    """POST /v1/internal/credentials/reset delegates to the credential service."""
+    from types import SimpleNamespace
+
+    fake_service = SimpleNamespace(reset_all=lambda: {"ok": True, "message": "Reset 2 credentials"})
+    monkeypatch.setattr("cursor.credentials.credential_service", fake_service)
+
+    response = client.post("/v1/internal/credentials/reset", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert response.json()["message"] == "Reset 2 credentials"
+
+
+def test_internal_credentials_me_uses_service(client, auth_headers, bypass_internal_auth, monkeypatch):
+    """GET /v1/internal/credentials/me delegates validation to the credential service."""
+    from types import SimpleNamespace
+
+    async def _validate_all(_client):
+        return {
+            "credentials": [
+                {
+                    "index": 0,
+                    "credential_id": 0,
+                    "valid": True,
+                    "account": {"email": "ok@example.com"},
+                },
+                {
+                    "index": 1,
+                    "credential_id": 1,
+                    "valid": False,
+                    "error": "bad credential",
+                },
+            ]
+        }
+
+    fake_service = SimpleNamespace(validate_all=_validate_all)
+    monkeypatch.setattr("cursor.credentials.credential_service", fake_service)
+    monkeypatch.setattr("routers.internal.get_http_client", lambda: object())
+
+    response = client.get("/v1/internal/credentials/me", headers=auth_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["credentials"][0]["valid"] is True
+    assert body["credentials"][0]["account"]["email"] == "ok@example.com"
+    assert body["credentials"][1]["valid"] is False
+    assert "bad credential" in body["credentials"][1]["error"]
 
 
 # ── Quota endpoint tests ──────────────────────────────────────────────────────

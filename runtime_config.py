@@ -57,6 +57,7 @@ OVERRIDABLE_KEYS: dict[str, type] = {
     "budget_usd": float,
     "log_request_bodies": bool,
     "metrics_enabled": bool,
+    "cursor_selection_strategy": str,
     "max_tools": int,
     "idem_ttl_seconds": int,
     "idem_max_entries": int,

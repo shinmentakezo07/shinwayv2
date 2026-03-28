@@ -59,14 +59,15 @@ async def liveness():
 @router.get("/health/ready")
 async def readiness():
     """Readiness probe — returns 503 if no credentials are available."""
-    from cursor.credentials import credential_pool
+    from cursor.credentials import credential_service
 
-    if credential_pool.size == 0:
+    status = credential_service.readiness_status()
+    if not status["ready"]:
         return JSONResponse(
             status_code=503,
             content={"status": "not_ready", "reason": "no_credentials"},
         )
-    return {"status": "ready", "credentials": credential_pool.size}
+    return {"status": "ready", "credentials": status["credentials"]}
 
 
 # ── Models ───────────────────────────────────────────────────────────────────
@@ -184,55 +185,37 @@ async def clear_cache(authorization: str | None = Header(default=None)):
 async def credential_status(authorization: str | None = Header(default=None)):
     """Return pool size and per-credential health snapshot."""
     await verify_bearer(authorization)
-    from cursor.credentials import credential_pool
+    from cursor.credentials import credential_service
 
-    return {
-        "pool_size": credential_pool.size,
-        "credentials": credential_pool.snapshot(),
-    }
+    return credential_service.list_status()
 
 
 @router.post("/v1/internal/credentials/reset")
 async def credential_reset(authorization: str | None = Header(default=None)):
     """Manually reset all credentials to healthy."""
     await verify_bearer(authorization)
-    from cursor.credentials import credential_pool
+    from cursor.credentials import credential_service
 
-    credential_pool.reset_all()
-    return {"ok": True, "message": f"Reset {credential_pool.size} credentials"}
+    return credential_service.reset_all()
 
 
 @router.get("/v1/internal/credentials/me")
 async def credential_me(authorization: str | None = Header(default=None)):
     """Validate every credential by calling Cursor's /api/auth/me."""
     await verify_bearer(authorization)
-    from cursor.credentials import credential_pool
+    from cursor.credentials import credential_service
 
     client = CursorClient(get_http_client())
-    results: list[dict] = []
+    return await credential_service.validate_all(client)
 
-    for cred in credential_pool._creds:
-        try:
-            data = await client.auth_me(cred)
-            results.append(
-                {
-                    "index": cred.index,
-                    "credential_id": cred.index,
-                    "valid": True,
-                    "account": data,
-                }
-            )
-        except Exception as exc:
-            results.append(
-                {
-                    "index": cred.index,
-                    "credential_id": cred.index,
-                    "valid": False,
-                    "error": str(exc),
-                }
-            )
 
-    return {"credentials": results}
+@router.get("/v1/internal/credentials/metrics")
+async def credential_metrics(authorization: str | None = Header(default=None)):
+    """Return cursor credential metrics and the active selection strategy."""
+    await verify_bearer(authorization)
+    from cursor.credentials import credential_service
+
+    return credential_service.metrics_status()
 
 
 # ── Context Budget ────────────────────────────────────────────────────────────
@@ -525,21 +508,13 @@ async def credential_add(
 ):
     """Add a new Cursor cookie to the live credential pool without restart."""
     await verify_bearer(authorization)
-    from cursor.credentials import credential_pool
+    from cursor.credentials import credential_service
 
-    cookie = body.cookie.strip()
-    if not cookie or "WorkosCursorSessionToken" not in cookie:
-        return JSONResponse(
-            status_code=422,
-            content={"error": "cookie must contain WorkosCursorSessionToken"},
-        )
-    added = credential_pool.add(cookie)
-    if not added:
-        return JSONResponse(
-            status_code=409,
-            content={"error": "cookie already in pool or pool at maximum (15)"},
-        )
-    return {"ok": True, "added": True, "pool_size": credential_pool.size}
+    ok, payload = credential_service.add_cookie(body.cookie)
+    if not ok:
+        status_code = 422 if "must contain" in payload["error"] else 409
+        return JSONResponse(status_code=status_code, content=payload)
+    return payload
 
 
 # ── Cache stats ───────────────────────────────────────────────────────────────
