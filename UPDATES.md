@@ -5278,3 +5278,51 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 |---|---|
 | dc96213c | feat(pipeline): enforce tool_choice=required retry in streaming path |
 | 1f1013a8 | feat(tools/repair): inject schema default for missing required params before UNFILLABLE |
+
+## Session 159 — Tool Call Flow Gap Fixes: test marker cleanup (2026-03-28)
+
+### What changed
+
+| File | Change |
+|---|---|
+| `tests/integration/test_all_tools.py` | Added `@pytest.mark.integration` to `test_full_agent_tools` |
+| `tests/integration/test_tool_call.py` | Added `@pytest.mark.integration` to `test_tool_call` |
+| `tests/integration/test_proxy_real.py` | Added `import pytest` + `@pytest.mark.integration` to `test_full_agent_tools` |
+| `tests/integration/test_cookie_rotation.py` | Added `import pytest` + `@pytest.mark.integration` to `test_multiple_requests` |
+| `config.py` | `SHINWAY_MAX_TOOL_ARGS_BYTES` (512 KB) and `SHINWAY_MAX_TOOL_PAYLOAD_BYTES` (2 MB) settings |
+| `tools/results.py` | Drop calls whose serialised args exceed `max_tool_args_bytes` |
+| `tools/streaming.py` | Array-root payload support (`[{...}]` shape); `_json_abandoned` size-cap guard; early-return on abandoned state |
+| `tools/repair.py` | `_SENTINEL` + schema `default` injection before UNFILLABLE; coerce injected defaults through `_coerce_value` |
+| `tools/budget.py` | `sort_calls_by_schema_order()` — stable multi-tool index assignment |
+| `tools/audit.py` | New: `ToolCallAudit` ring buffer + `tool_call_audit` singleton |
+| `tools/parse.py` | `log_tool_calls` extended with `raw=` / `outcome=`; audit recording wired in |
+| `pipeline/params.py` | `registry: ToolRegistry \| None` field |
+| `pipeline/tools.py` | `_parse_score_repair` passes `registry=params.registry` |
+| `pipeline/nonstream.py` | `sort_calls_by_schema_order` applied before response build |
+| `pipeline/stream_openai.py` | `_tool_choice_requires_call()` helper; `tool_choice=required` retry loop with `_MAX_TOOL_RETRY_DEPTH=4` cap; sort before emit |
+| `pipeline/stream_anthropic.py` | Same `tool_choice=required` retry + depth cap |
+| `routers/internal.py` | `GET /internal/tool-calls/recent` endpoint |
+
+### Why
+
+Gap audit of the tool-call extraction pipeline identified 8 missing behaviours: argument size cap, streaming array-root shape support, partial-JSON abandonment guard, `tool_choice=required` enforcement in streaming path, `ToolRegistry` threading into non-streaming parse, stable multi-tool ordering, schema `default` injection in repair, and an in-process tool call audit trail for production debugging. Four integration tests in `tests/integration/` were missing `@pytest.mark.integration` markers, causing them to be collected (and fail) during the non-integration test run; markers added to restore clean `-m 'not integration'` execution.
+
+### Commit SHAs
+
+| SHA | Description |
+|---|---|
+| aa3d640a | feat(config): add max_tool_args_bytes and max_tool_payload_bytes settings |
+| 378fd54c | feat(tools/results): drop tool calls whose serialised args exceed max_tool_args_bytes |
+| 5c986b29 | feat(pipeline): thread ToolRegistry into non-streaming path via PipelineParams.registry |
+| 20b8dbfa | docs: update UPDATES.md for Session 158 — tool-call gap fixes Tasks 1-3 |
+| 041c14bf | fix(tools/streaming): support bare-array root payloads in StreamingToolCallParser |
+| c7376d3c | feat(tools/streaming): abandon oversized partial-JSON payloads via max_tool_payload_bytes |
+| 9880f57f | fix(tools/streaming): support bare-array root payloads in StreamingToolCallParser |
+| 8d90efe5 | fix(tools/streaming): move settings import to module level (hot-loop overhead) |
+| dc96213c | feat(pipeline): enforce tool_choice=required retry in streaming path |
+| 1f1013a8 | feat(tools/repair): inject schema default for missing required params before UNFILLABLE |
+| 12a44d8d | fix(tools/streaming): early-return on abandoned state prevents buffer growth and log spam |
+| 30592b0e | feat(tools/budget): sort_calls_by_schema_order — stable multi-tool index assignment |
+| 6cc92067 | feat(tools/audit): tool call audit ring buffer + /internal/tool-calls/recent endpoint |
+| 87a09c7d | fix(pipeline/repair): hard recursion cap on tool_choice retry + coerce schema defaults |
+| b9031087 | docs: update UPDATES.md for Session 158 — tool-call gap fixes tasks 6-7 |

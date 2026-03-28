@@ -1,6 +1,8 @@
 import requests
+import pytest
 import time
 
+@pytest.mark.integration
 def test_multiple_requests():
     import os
     port = os.environ.get("PORT", "4002")
