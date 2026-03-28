@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from tools.registry import ToolRegistry
 
 
 @dataclass
@@ -29,3 +32,4 @@ class PipelineParams:
     request_id: str = ""  # propagated from request_id middleware
     fallback_model: str | None = None  # set by _call_with_retry when a fallback is active; None on primary
     temperature: float | None = None  # pass-through from client; informational only (upstream ignores it but we record it)
+    registry: "ToolRegistry | None" = None  # pre-built registry for parse_tool_calls_from_text
