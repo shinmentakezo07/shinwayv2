@@ -16,10 +16,7 @@ import time
 
 from tokens import context_window_for
 
-
-def _safe_pct(used: int, ctx: int) -> float:
-    """Return usage percentage rounded to 2dp, guarding against zero context window."""
-    return round(used / ctx * 100, 2) if ctx else 0.0
+from converters.shared import _safe_pct
 
 
 def now_ts() -> int:
