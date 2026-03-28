@@ -5326,3 +5326,29 @@ Gap audit of the tool-call extraction pipeline identified 8 missing behaviours: 
 | 6cc92067 | feat(tools/audit): tool call audit ring buffer + /internal/tool-calls/recent endpoint |
 | 87a09c7d | fix(pipeline/repair): hard recursion cap on tool_choice retry + coerce schema defaults |
 | b9031087 | docs: update UPDATES.md for Session 158 — tool-call gap fixes tasks 6-7 |
+
+---
+
+## Session 159 — Dead import cleanup + anthropic sort wiring (2026-03-28)
+
+### What changed
+- `pipeline/stream_anthropic.py` — added `_sort_calls` import from `tools.budget`; added `final_calls = _sort_calls(final_calls, params.tools)` call immediately after `_deduplicate_tool_calls` in the stream-finish tool recovery path (mirrors `_openai_stream` exactly)
+- `tools/parse.py` — removed dead `import re` and `import uuid` (both moved to submodules; not used directly here)
+- `tools/registry.py` — removed duplicate `_normalize_name` definition and dead `import re`; added `from tools.results import _normalize_name` (canonical home)
+- `routers/anthropic.py` — removed dead `from handlers import RequestValidationError`; removed dead `count_tool_instruction_tokens` from tokens import (not called in this file)
+- `routers/internal.py` — removed dead `OVERRIDABLE_KEYS` from `runtime_config` import; removed dead `from middleware.auth import verify_bearer as _vb` local re-import inside `release_idempotency_lock`
+- `routers/openai.py` — removed dead bare `import litellm`; removed dead `import msgspec.json as _msgjson`; removed dead `count_message_tokens` and `estimate_from_text` from tokens import
+
+### Why
+- Ruff F401 cleanup pass to eliminate dead imports that accumulated as code was refactored into submodules
+- `_normalize_name` duplication between `tools/registry.py` and `tools/results.py` was a DRY violation — registry now imports the canonical definition
+- Anthropic stream path was missing the schema-order sort step that the OpenAI path had, causing inconsistent tool call ordering for multi-tool responses on the Anthropic path
+
+### Test result
+1088 passed, 7 deselected in 29.74s
+
+### Commit SHAs
+
+| SHA | Description |
+|---|
+| 5b32021c | fix: wire sort to anthropic stream, remove dead imports, deduplicate _normalize_name |
