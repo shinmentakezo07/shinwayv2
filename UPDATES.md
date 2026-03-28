@@ -5247,3 +5247,34 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | SHA | Description |
 |---|---|
 | _(not committed)_ | Added cursor metrics endpoint, latency tracking, and feature-flagged health-weighted selection |
+
+## Session 158 — Tool-call gap fixes: Tasks 6-7 (2026-03-28)
+
+### What changed
+- `pipeline/stream_openai.py` — added `_tool_choice_requires_call()` helper; added `_retry_count: int = 0` param to `_openai_stream`; inserted retry block in genuine-text-response branch that re-invokes `_openai_stream` with a nudge message when `tool_choice=required/any` and no tool calls were parsed
+- `pipeline/stream_anthropic.py` — imported `_tool_choice_requires_call` from `pipeline.stream_openai`; added `_retry_count: int = 0` param to `_anthropic_stream`; inserted equivalent retry block before the suppression check in the no-tool-call else branch
+- `tools/repair.py` — added `_SENTINEL` module-level sentinel object; rewrote Pass 3 loop to check for an explicit `default` in the param schema before falling back to type-appropriate defaults or UNFILLABLE, so declared schema defaults are always injected rather than silently skipped
+- `tests/test_stream_openai.py` — added `test_tool_choice_required_helper_true_for_required` and `test_tool_choice_required_helper_false_for_auto` covering all enum/string/dict cases
+- `tests/test_repair.py` — added `test_default_injected_for_missing_required`, `test_string_with_default_injected`, `test_unfillable_string_no_default_still_skipped`
+
+### Which lines / functions
+- `pipeline/stream_openai.py:_tool_choice_requires_call` — new helper (lines ~32-40)
+- `pipeline/stream_openai.py:_openai_stream` — signature extended with `_retry_count`; retry block inserted in the `else` branch of `elif params.tools and tool_emitter and not tool_emitter.active`
+- `pipeline/stream_anthropic.py:_anthropic_stream` — signature extended; retry block inserted before H5 suppression check
+- `tools/repair.py:_SENTINEL` — module-level sentinel (line ~19)
+- `tools/repair.py:repair_tool_call` — Pass 3 loop entirely replaced with sentinel-aware version
+
+### Why
+- Task 6: `nonstream.py` already retried when `tool_choice=required` yielded no tool calls, but the streaming paths (`_openai_stream`, `_anthropic_stream`) silently emitted a text response instead — parity gap between streaming and non-streaming paths
+- Task 7: Pass 3 in `repair_tool_call` checked for `enum` and type before filling missing required params, but never checked the schema's `default` field — a declared `default` is always safe to inject and should take priority over both type fallbacks and UNFILLABLE
+
+### Validation
+- `pytest tests/test_stream_openai.py -v -k tool_choice` → 2 passed
+- `pytest tests/test_repair.py -v` → 9 passed
+- `pytest tests/ --ignore=tests/integration -x -q` → 1074 passed, 0 failures
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| dc96213c | feat(pipeline): enforce tool_choice=required retry in streaming path |
+| 1f1013a8 | feat(tools/repair): inject schema default for missing required params before UNFILLABLE |
