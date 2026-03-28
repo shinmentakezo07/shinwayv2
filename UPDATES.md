@@ -5470,3 +5470,39 @@ Full non-integration suite: 1129 passed, 0 failures. All 6 new pipeline module i
 | SHA | Description |
 |---|---|
 | 2112f8e4 | feat(pipeline/stream_state): StreamPhase enum + StreamStateTracker — explicit streaming state |
+
+## Session 164 — Pipeline wiring + dead-code audit (2026-03-28)
+
+### What changed
+- `pipeline/tracer.py` — removed unused `field` import from `from dataclasses import dataclass, field`
+
+### Which lines / functions
+- `pipeline/tracer.py:1-12` — `from dataclasses import dataclass, field` → `from dataclasses import dataclass` (F401 fix; `field` was never referenced in the file)
+
+### Why
+Comprehensive wiring and dead-code audit of all 6 new pipeline modules added across Sessions 160-163. The audit confirmed:
+
+**Fully wired into production code paths:**
+- `pipeline/context.py:PipelineContext` — instantiated and used in all 4 hot paths: `stream_openai.py` (lines 117-118, 124, 350, 357, 366, 383), `stream_anthropic.py` (lines 55-56, 60, 236, 242, 251, 306, 352, 369), `nonstream.py` (lines 55-56, 77, 165, 179-180, 201, 281); `context` parameter accepted in `record.py:_record` (line 36)
+- `pipeline/response_validator.py:validate_openai_response` — called in `nonstream.py:168-169` before `return resp`
+- `pipeline/response_validator.py:validate_anthropic_response` — called in `nonstream.py:284-285` before `return resp`
+
+**Exported but not yet called in production code (extensibility-ready — expected):**
+- `pipeline/hooks.py:HookRegistry`, `hook_registry`, `PipelineHook` — hook registration points exist; no hooks registered by production code yet (by design: additive extension point)
+- `pipeline/middleware.py:run_pipeline_middleware` — exported and tested; not yet inserted into stream/nonstream call sites (next wiring step)
+- `pipeline/tracer.py:PipelineTracer` — exported and tested; not yet instantiated in stream paths (next wiring step)
+- `pipeline/stream_state.py:StreamPhase`, `StreamStateTracker` — exported and tested; not yet replacing boolean locals in stream generators (planned refactor)
+
+**No broken imports, no missing `__all__` entries, no circular dependencies detected.**
+
+### Ruff findings
+- `pipeline/tracer.py` — `dataclasses.field` imported but unused (F401). Fixed in this session.
+- All other 6 modules: clean.
+
+### Test results
+- 1129 passed, 7 deselected (integration), 0 failures — suite fully green after fix.
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| (pending) | fix(pipeline/tracer): remove unused `field` import — ruff F401 |
