@@ -73,6 +73,14 @@ class Settings(BaseSettings):
 
     # ── Validation limits ───────────────────────────────────────────────────
     max_tools: int = Field(default=64, alias="SHINWAY_MAX_TOOLS")
+    max_tool_args_bytes: int = Field(
+        default=524288,   # 512 KB — per-call argument blob cap
+        alias="SHINWAY_MAX_TOOL_ARGS_BYTES",
+    )
+    max_tool_payload_bytes: int = Field(
+        default=2097152,  # 2 MB — streaming parser abandonment threshold
+        alias="SHINWAY_MAX_TOOL_PAYLOAD_BYTES",
+    )
 
     # ── Pricing ─────────────────────────────────────────────────────────────
     price_anthropic_per_1k: float = Field(
