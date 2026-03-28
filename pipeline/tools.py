@@ -48,7 +48,7 @@ def _parse_score_repair(
     Returns empty list if no calls found or confidence too low.
     """
     calls = _limit_tool_calls(
-        parse_tool_calls_from_text(text, params.tools) or [],
+        parse_tool_calls_from_text(text, params.tools, registry=params.registry) or [],
         params.parallel_tool_calls,
     )
     if not calls:
