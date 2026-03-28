@@ -5352,3 +5352,39 @@ Gap audit of the tool-call extraction pipeline identified 8 missing behaviours: 
 | SHA | Description |
 |---|
 | 5b32021c | fix: wire sort to anthropic stream, remove dead imports, deduplicate _normalize_name |
+
+---
+
+## Session 160 — PipelineContext: per-request mutable state + record wiring (2026-03-28)
+
+### What changed
+- `pipeline/context.py` — created
+- `pipeline/__init__.py` — added `PipelineContext` re-export
+- `pipeline/record.py` — updated `_record()` signature and body
+- `pipeline/stream_openai.py` — instantiate `_ctx`, call `record_ttft()`, pass `context=_ctx` to all `_record()` calls
+- `pipeline/stream_anthropic.py` — same as above
+- `pipeline/nonstream.py` — same as above for both handlers
+- `tests/test_pipeline_context.py` — created
+
+### Which lines / functions
+- `pipeline/context.py` — new file: `PipelineContext` dataclass with fields `request_id`, `started_at`, `suppression_attempts`, `fallback_model_used`, `ttft_ms`, `bytes_streamed`, `tool_calls_parsed`; methods `record_ttft()` (idempotent) and `latency_ms()`
+- `pipeline/__init__.py:line 16` — added `from pipeline.context import PipelineContext`
+- `pipeline/record.py:_record` — added `context: "PipelineContext | None" = None` parameter; `effective_ttft` and `effective_latency` derived from context when present; `suppression_attempts` and `tool_calls_parsed` added to `log.info("pipeline_complete", ...)`; `TYPE_CHECKING` guard added for import
+- `pipeline/stream_openai.py:_openai_stream` — `_ctx = PipelineContext(...)` after `created_ts`; `_ctx.record_ttft()` before role-chunk yield; `context=_ctx` on all 4 `pkg._record()` call sites
+- `pipeline/stream_anthropic.py:_anthropic_stream` — `_ctx = PipelineContext(...)` after `started`; `_ctx.record_ttft()` before `anthropic_message_start` yield; `context=_ctx` on all 5 `pkg._record()` call sites
+- `pipeline/nonstream.py:handle_openai_non_streaming` — `_ctx = PipelineContext(...)` at top; `context=_ctx` on both `_record()` call sites
+- `pipeline/nonstream.py:handle_anthropic_non_streaming` — same
+
+### Why
+- Introduced a dedicated mutable per-request context object (`PipelineContext`) to carry state that accumulates during a pipeline run (suppression retries, TTFT, bytes streamed, tool calls parsed) — decouples mutable bookkeeping from the immutable `PipelineParams` dataclass
+- Wired into `_record()` so analytics logs now include `suppression_attempts` and `tool_calls_parsed`, and use context-derived latency/TTFT which is more accurate than the manual `(time.time() - started)` arithmetic
+
+### Test result
+1094 passed, 7 deselected in 27.25s
+
+### Commit SHAs
+
+| SHA | Description |
+|---|
+| 3270aa60 | feat(pipeline/context): PipelineContext — per-request mutable pipeline state |
+| 854265e8 | feat(pipeline): wire PipelineContext into record, streaming, and nonstream paths |
