@@ -5388,3 +5388,31 @@ Gap audit of the tool-call extraction pipeline identified 8 missing behaviours: 
 |---|
 | 3270aa60 | feat(pipeline/context): PipelineContext — per-request mutable pipeline state |
 | 854265e8 | feat(pipeline): wire PipelineContext into record, streaming, and nonstream paths |
+
+## Session 161 — Login Page Redesign (2026-03-28)
+
+### Files Modified
+- `admin-ui/app/login/page.tsx` — full rewrite of UI layer; all auth logic unchanged
+- `admin-ui/app/login/login.css` — new CSS module extracted from inline styles
+
+### What changed
+- **`NodeGraph`** — animated SVG background with 18 floating nodes + connecting lines, radial fade mask, per-node drift animations
+- **`TerminalFeed`** — live-typed boot log panel (14 lines, staggered setTimeout reveal) with macOS-style titlebar and blinking cursor
+- **`LockRing`** — SVG progress arc that animates from 28% → full on success, red partial arc on error, check/lock icon swap
+- **`Corner`** — animated bracket accents on the left panel
+- **`CentreGlow`** — radial green ambient glow behind the auth card
+- **`Scanlines`** — subtle scanline texture overlay
+- **Top bar** — logo mark now uses green accent squares; sys-pill has green border + glow dot; clock retained
+- **Left panel** — heading hierarchy (Shinway / Control Plane), stats grid, terminal feed, animated right-edge accent line; hidden below 980px
+- **Auth card** — centred lock ring replaces flat icon; centred title/subtitle; CSS module import replaces 400-line inline `<style>` tag
+- **CSS** — extracted to `login.css`; IBM Plex fonts, full dark glassmorphism palette, all interactive states (focus ring, error shake, submit glow, arrow slide)
+
+### Why
+- User requested a more attractive, distinctive login UI with new design components
+- Separated CSS into a module file to respect the 170-line TSX write limit and improve maintainability
+
+### Commit SHAs
+
+| SHA | Description |
+|---|
+| 06552978 | feat(admin-ui/login): redesigned login page — node graph bg, terminal feed, lock ring, CSS module |
