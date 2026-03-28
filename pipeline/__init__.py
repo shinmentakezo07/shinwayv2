@@ -13,6 +13,7 @@ from tools.parse import (  # noqa: F401
     StreamingToolCallParser,
 )
 from pipeline.params import PipelineParams
+from pipeline.context import PipelineContext  # noqa: F401
 from pipeline.record import _provider_from_model, _record  # noqa: F401
 from pipeline.fallback import FallbackChain  # noqa: F401
 from pipeline.suppress import (
