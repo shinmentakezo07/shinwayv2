@@ -38,6 +38,7 @@ from pipeline.params import PipelineParams
 from pipeline.record import _record
 from pipeline.suppress import _is_suppressed, _with_appended_cursor_message, _call_with_retry
 from pipeline.tools import _parse_score_repair
+from tools.budget import sort_calls_by_schema_order as _sort_calls
 from pipeline.stream_openai import _extract_visible_content
 from tokens import count_message_tokens, estimate_from_text
 
@@ -139,6 +140,7 @@ async def handle_openai_non_streaming(
 
     # Build response message
     if parsed_calls:
+        parsed_calls = _sort_calls(parsed_calls, params.tools)
         message = {"role": "assistant", "content": None, "tool_calls": parsed_calls}
     else:
         message = {"role": "assistant", "content": visible_text}
@@ -250,6 +252,7 @@ async def handle_anthropic_non_streaming(
         content_blocks.append({"type": "thinking", "thinking": thinking_text})
 
     if parsed_calls:
+        parsed_calls = _sort_calls(parsed_calls, params.tools)
         content_blocks.extend(convert_tool_calls_to_anthropic(parsed_calls))
         stop_reason = "tool_use"
     else:

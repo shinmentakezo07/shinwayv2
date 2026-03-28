@@ -71,6 +71,36 @@ def repair_invalid_calls(
     return out
 
 
+def sort_calls_by_schema_order(
+    calls: list[dict],
+    tools: list[dict],
+) -> list[dict]:
+    """Re-order parsed tool calls to match the client's declared tool list order.
+
+    Calls whose name is not in the schema are appended after all known ones,
+    preserving their relative order. Does not mutate the input list.
+
+    Args:
+        calls: Parsed tool calls in OpenAI format.
+        tools: Client-declared tool definitions in OpenAI format.
+
+    Returns:
+        New list with calls ordered by schema position.
+    """
+    if not tools or not calls:
+        return calls
+    order: dict[str, int] = {
+        t.get("function", {}).get("name", ""): i
+        for i, t in enumerate(tools)
+        if isinstance(t, dict)
+    }
+    sentinel = len(tools)  # unknown tools sort after all known ones
+    return sorted(
+        calls,
+        key=lambda c: order.get(c.get("function", {}).get("name", ""), sentinel),
+    )
+
+
 def deduplicate_tool_calls(calls: list[dict]) -> list[dict]:
     """Remove duplicate tool calls by (name, arguments) signature.
 

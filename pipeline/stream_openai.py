@@ -21,6 +21,7 @@ from pipeline.params import PipelineParams
 from tools.budget import deduplicate_tool_calls as _deduplicate_tool_calls
 from tools.budget import limit_tool_calls as _limit_tool_calls
 from tools.budget import repair_invalid_calls as _repair_invalid_calls
+from tools.budget import sort_calls_by_schema_order as _sort_calls
 from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter
 from tools.parse import _find_marker_pos, log_tool_calls
 from tools.registry import ToolRegistry
@@ -293,6 +294,7 @@ async def _openai_stream(
                 log_tool_calls(final_calls, context="openai_stream_finish", request_id=params.request_id)
                 final_calls = _repair_invalid_calls(final_calls, params.tools)
                 final_calls = _deduplicate_tool_calls(final_calls)
+                final_calls = _sort_calls(final_calls, params.tools)
                 for chunk in tool_emitter.emit(final_calls):
                     yield chunk
                 finish_reason = "tool_calls"
