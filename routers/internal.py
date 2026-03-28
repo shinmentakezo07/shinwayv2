@@ -558,6 +558,23 @@ async def fallback_status(authorization: str | None = Header(default=None)):
     }
 
 
+# ── Tool call audit ──────────────────────────────────────────────────────────
+
+@router.get("/v1/internal/tool-calls/recent", summary="Recent tool call parse events")
+async def get_recent_tool_calls(
+    limit: int = Query(default=50, ge=1, le=200),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """Return the last N tool call parse events from the in-process audit buffer.
+
+    Requires admin auth.
+    """
+    await verify_bearer(authorization)
+    from tools.audit import tool_call_audit
+    entries = tool_call_audit.recent(limit=min(limit, 200))
+    return {"count": len(entries), "entries": entries}
+
+
 # ── Unified key usage ─────────────────────────────────────────────────────────
 
 @router.get("/v1/internal/keys/{full_key:path}/usage")

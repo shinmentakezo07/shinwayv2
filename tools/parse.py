@@ -54,6 +54,8 @@ def log_tool_calls(
     calls: list[dict],
     context: str = "parsed",
     request_id: str | None = None,
+    raw: str = "",
+    outcome: str = "success",
 ) -> None:
     """Emit a structured log entry for each tool call.
 
@@ -62,7 +64,11 @@ def log_tool_calls(
         context:    Label for where in the pipeline this log was emitted
                     (e.g. "parsed", "streaming", "retry").
         request_id: Optional request identifier for correlation.
+        raw:        Raw marker+JSON text slice from the upstream stream.
+        outcome:    Parse outcome label passed to the audit ring buffer.
     """
+    from tools.audit import tool_call_audit  # lazy — avoids circular at module load
+    tool_call_audit.record(calls or [], raw=raw, outcome=outcome, request_id=request_id or "")
     for call in calls or []:
         fn = call.get("function", {})
         name = fn.get("name", "unknown")
