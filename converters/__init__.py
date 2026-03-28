@@ -33,3 +33,7 @@ from converters.from_cursor import (  # noqa: F401
     scrub_support_preamble,
 )
 from converters.shared import _safe_pct  # noqa: F401
+from converters.message_normalizer import (  # noqa: F401
+    normalize_openai_messages,
+    normalize_anthropic_messages,
+)
