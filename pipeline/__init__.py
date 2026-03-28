@@ -42,6 +42,7 @@ from pipeline.response_validator import validate_openai_response, validate_anthr
 from pipeline.tracer import PipelineTracer  # noqa: F401
 from pipeline.hooks import HookRegistry, PipelineHook, hook_registry  # noqa: F401
 from pipeline.middleware import run_pipeline_middleware  # noqa: F401
+from pipeline.stream_state import StreamPhase, StreamStateTracker  # noqa: F401
 
 __all__ = [
     "PipelineParams",
@@ -57,4 +58,6 @@ __all__ = [
     "PipelineHook",
     "hook_registry",
     "run_pipeline_middleware",
+    "StreamPhase",
+    "StreamStateTracker",
 ]
