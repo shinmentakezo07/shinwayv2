@@ -58,8 +58,8 @@ body {
 
 .lp-left { display: none; }
 @media (min-width: 980px) {
-  .lp-stage { justify-content: center; }
-  .lp-left  { display: flex; width: 400px; flex-shrink: 0; }
+  .lp-stage { justify-content: center; align-items: stretch; }
+  .lp-left  { display: flex; width: 400px; flex-shrink: 0; align-items: stretch; }
 }
 .lp-left-inner {
   width: 100%;
@@ -69,7 +69,6 @@ body {
   border-radius: 20px 0 0 20px;
   padding: 42px 36px;
   position: relative; overflow: hidden;
-  min-height: 540px;
   display: flex; flex-direction: column; justify-content: flex-end;
 }
 .lp-left-content {
@@ -170,11 +169,15 @@ body {
     0 32px 96px rgba(0,0,0,0.96),
     0 8px 32px rgba(0,0,0,0.7);
   position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center;
 }
 @media (min-width: 980px) {
   .lp-card {
     border-radius: 0 20px 20px 0;
     border-left-color: rgba(0,229,160,0.14);
+    align-self: stretch;
+    justify-content: center;
+    max-width: 410px;
   }
 }
 .lp-sheen {
