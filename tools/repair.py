@@ -112,8 +112,9 @@ def repair_tool_call(
             explicit_default = prop_schema.get("default", _SENTINEL)
 
             if explicit_default is not _SENTINEL:
-                repaired_args[req] = explicit_default
-                repairs.append(f"filled missing required '{req}' with schema default {explicit_default!r}")
+                coerced_default = _coerce_value(explicit_default, prop_schema, req, repairs)
+                repaired_args[req] = coerced_default
+                repairs.append(f"filled missing required '{req}' with schema default {coerced_default!r}")
             elif prop_schema.get("enum"):
                 fallback = prop_schema["enum"][0]
                 repaired_args[req] = fallback

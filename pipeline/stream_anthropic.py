@@ -27,7 +27,7 @@ from tools.budget import repair_invalid_calls as _repair_invalid_calls
 from tools.emitter import compute_tool_signature as _compute_tool_signature
 from tools.emitter import stream_anthropic_tool_input as _stream_anthropic_tool_input
 from pipeline.suppress import _is_suppressed
-from pipeline.stream_openai import _tool_choice_requires_call
+from pipeline.stream_openai import _tool_choice_requires_call, _MAX_TOOL_RETRY_DEPTH
 from tools.parse import _find_marker_pos, log_tool_calls
 from tools.registry import ToolRegistry
 import utils.stream_monitor as _stream_monitor_mod
@@ -305,7 +305,8 @@ async def _anthropic_stream(
         if (
             params.tools
             and _tool_choice_requires_call(params.tool_choice)
-            and _retry_count < settings.retry_attempts
+            and not final_calls
+            and _retry_count < min(settings.retry_attempts, _MAX_TOOL_RETRY_DEPTH)
         ):
             from pipeline.suppress import _with_appended_cursor_message, _msg
             retry_params = _with_appended_cursor_message(

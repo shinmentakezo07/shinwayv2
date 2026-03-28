@@ -30,6 +30,8 @@ import utils.stream_monitor as _stream_monitor_mod
 
 log = structlog.get_logger()
 
+_MAX_TOOL_RETRY_DEPTH = 4  # absolute ceiling regardless of SHINWAY_RETRY_ATTEMPTS
+
 
 def _tool_choice_requires_call(tool_choice) -> bool:
     """Return True when the client mandates at least one tool call."""
@@ -303,7 +305,8 @@ async def _openai_stream(
                 if (
                     params.tools
                     and _tool_choice_requires_call(params.tool_choice)
-                    and _retry_count < settings.retry_attempts
+                    and not final_calls
+                    and _retry_count < min(settings.retry_attempts, _MAX_TOOL_RETRY_DEPTH)
                 ):
                     from pipeline.suppress import _with_appended_cursor_message, _msg
                     retry_params = _with_appended_cursor_message(
