@@ -165,6 +165,8 @@ async def handle_openai_non_streaming(
     await _record(params, visible_text or text, latency_ms, ttft_ms=int(latency_ms), context=_ctx)
     if response_cache.should_cache(params.tools):
         await response_cache.aset(cache_key, resp)
+    from pipeline.response_validator import validate_openai_response
+    validate_openai_response(resp, params)  # logs warnings only — never rejects
     return resp
 
 
@@ -279,4 +281,6 @@ async def handle_anthropic_non_streaming(
     await _record(params, text, latency_ms, ttft_ms=int(latency_ms), context=_ctx)
     if response_cache.should_cache(params.tools):
         await response_cache.aset(cache_key, resp)
+    from pipeline.response_validator import validate_anthropic_response
+    validate_anthropic_response(resp, params)  # logs warnings only — never rejects
     return resp
