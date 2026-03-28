@@ -33,7 +33,6 @@ from pipeline import (
 from routers.model_router import resolve_model
 from tokens import count_message_tokens, count_tool_instruction_tokens, estimate_from_text
 from tools.normalize import normalize_openai_tools, to_anthropic_tool_format, validate_tool_choice
-from tools.registry import ToolRegistry
 from utils.context import context_engine
 from validators.request import validate_openai_payload
 
@@ -214,7 +213,6 @@ async def chat_completions(
         except (TypeError, ValueError):
             pass
 
-    registry = ToolRegistry(tools) if tools else None
     params = PipelineParams(
         api_style="openai",
         model=model,
@@ -233,7 +231,6 @@ async def chat_completions(
         stop=stop,
         temperature=temperature,
         request_id=getattr(request.state, "request_id", ""),
-        registry=registry,
     )
 
     client = CursorClient(get_http_client())

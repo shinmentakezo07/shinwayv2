@@ -5247,36 +5247,3 @@ Phase 4 completes the parse.py decomposition: JSON repair logic, call repair log
 | SHA | Description |
 |---|---|
 | _(not committed)_ | Added cursor metrics endpoint, latency tracking, and feature-flagged health-weighted selection |
-
-## Session 158 — Tool-call gap fixes: config limits, args size cap, ToolRegistry wiring (2026-03-28)
-
-### What changed
-- `config.py` — added 2 new settings fields after `max_tools`
-- `tools/results.py` — added oversized-args guard in `_build_tool_call_results`
-- `pipeline/params.py` — added `registry` field and `TYPE_CHECKING` guard
-- `pipeline/tools.py` — wired `registry=params.registry` into `_parse_score_repair`
-- `routers/openai.py` — added `ToolRegistry` import; builds `registry` per request; passes into `PipelineParams`
-- `routers/anthropic.py` — same as openai.py
-- `tests/test_config.py` — created; 2 tests for new config fields
-- `tests/test_results.py` — appended 2 tests: `test_oversized_args_dropped`, `test_normal_args_pass`
-- `tests/test_registry_nonstream.py` — created; 2 tests for `PipelineParams.registry` field
-
-### Which lines / functions
-- `config.py:Settings` — added `max_tool_args_bytes` (default 524288, alias `SHINWAY_MAX_TOOL_ARGS_BYTES`) and `max_tool_payload_bytes` (default 2097152, alias `SHINWAY_MAX_TOOL_PAYLOAD_BYTES`) after `max_tools`
-- `tools/results.py:_build_tool_call_results` — after `arg_str` assignment: checks `len(arg_str) > settings.max_tool_args_bytes`; logs `tool_args_oversized_dropped` and `continue`s to drop the call
-- `pipeline/params.py:PipelineParams` — added `from typing import TYPE_CHECKING` + `if TYPE_CHECKING: from tools.registry import ToolRegistry`; added `registry: "ToolRegistry | None" = field(default=None, repr=False)` at end of dataclass
-- `pipeline/tools.py:_parse_score_repair` — `parse_tool_calls_from_text(text, params.tools, registry=params.registry) or []`
-- `routers/openai.py:chat_completions` — `registry = ToolRegistry(tools) if tools else None` before `PipelineParams(...)`; `registry=registry` added to `PipelineParams` kwargs
-- `routers/anthropic.py:anthropic_messages` — same pattern as openai.py
-
-### Why
-- `max_tool_args_bytes` / `max_tool_payload_bytes`: gap-fix spec required configurable byte caps for tool argument blobs and streaming parser abandonment threshold — previously hardcoded/absent.
-- Oversized args guard: tool calls with multi-MB argument blobs were being passed upstream silently; now dropped with a structured warning log before they reach the SSE path.
-- `PipelineParams.registry`: `ToolRegistry` was being rebuilt on every parse call inside the streaming/non-streaming hot paths; threading it through `PipelineParams` builds it once per request and reuses it everywhere, fixing redundant reconstruction.
-
-### Commit SHAs
-| SHA | Description |
-|---|---|
-| aa3d640a | feat(config): add max_tool_args_bytes and max_tool_payload_bytes settings |
-| 378fd54c | feat(tools/results): drop tool calls whose serialised args exceed max_tool_args_bytes |
-| 5c986b29 | feat(pipeline): thread ToolRegistry into non-streaming path via PipelineParams.registry |
