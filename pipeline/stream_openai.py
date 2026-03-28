@@ -29,6 +29,16 @@ import utils.stream_monitor as _stream_monitor_mod
 
 log = structlog.get_logger()
 
+
+def _tool_choice_requires_call(tool_choice) -> bool:
+    """Return True when the client mandates at least one tool call."""
+    if tool_choice in ("required", "any"):
+        return True
+    if isinstance(tool_choice, dict):
+        return tool_choice.get("type") in ("any", "function", "tool")
+    return False
+
+
 _TOOL_MARKER = "[assistant_tool_calls]"
 _TOOL_MARKER_PREFIXES: frozenset[str] = frozenset(
     _TOOL_MARKER[:i] for i in range(1, len(_TOOL_MARKER) + 1)
@@ -94,6 +104,7 @@ async def _openai_stream(
     client: CursorClient,
     params: PipelineParams,
     anthropic_tools: list[dict] | None,
+    _retry_count: int = 0,
 ) -> AsyncIterator[str]:
     """Generate OpenAI SSE chunks from Cursor stream."""
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -286,6 +297,28 @@ async def _openai_stream(
                     yield chunk
                 finish_reason = "tool_calls"
             else:
+                # tool_choice=required but no calls were parsed — retry with a nudge
+                if (
+                    params.tools
+                    and _tool_choice_requires_call(params.tool_choice)
+                    and _retry_count < settings.retry_attempts
+                ):
+                    from pipeline.suppress import _with_appended_cursor_message, _msg
+                    retry_params = _with_appended_cursor_message(
+                        params,
+                        _msg(
+                            "user",
+                            "This request needs a tool call. Please respond using the "
+                            "[assistant_tool_calls] JSON format with one of the session tools.",
+                        ),
+                    )
+                    async for chunk in _openai_stream(
+                        client, retry_params, anthropic_tools,
+                        _retry_count=_retry_count + 1,
+                    ):
+                        yield chunk
+                    return
+
                 # Genuine text response — extract any remaining visible content
                 thinking_text, visible, _ = _extract_visible_content(
                     acc, params.show_reasoning

@@ -27,6 +27,7 @@ from tools.budget import repair_invalid_calls as _repair_invalid_calls
 from tools.emitter import compute_tool_signature as _compute_tool_signature
 from tools.emitter import stream_anthropic_tool_input as _stream_anthropic_tool_input
 from pipeline.suppress import _is_suppressed
+from pipeline.stream_openai import _tool_choice_requires_call
 from tools.parse import _find_marker_pos, log_tool_calls
 from tools.registry import ToolRegistry
 import utils.stream_monitor as _stream_monitor_mod
@@ -44,6 +45,7 @@ async def _anthropic_stream(
     client: CursorClient,
     params: PipelineParams,
     anthropic_tools: list[dict] | None,
+    _retry_count: int = 0,
 ) -> AsyncIterator[str]:
     """Generate Anthropic SSE events from Cursor stream."""
     mid = f"msg_{uuid.uuid4().hex[:24]}"
@@ -298,6 +300,28 @@ async def _anthropic_stream(
                         _an_tps = output_tokens / _an_gen_s
                 await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_an_ttft, output_tps=_an_tps)
                 return
+
+        # tool_choice=required but no calls were parsed — retry with a nudge
+        if (
+            params.tools
+            and _tool_choice_requires_call(params.tool_choice)
+            and _retry_count < settings.retry_attempts
+        ):
+            from pipeline.suppress import _with_appended_cursor_message, _msg
+            retry_params = _with_appended_cursor_message(
+                params,
+                _msg(
+                    "user",
+                    "This request needs a tool call. Please respond using the "
+                    "[assistant_tool_calls] JSON format with one of the session tools.",
+                ),
+            )
+            async for chunk in _anthropic_stream(
+                client, retry_params, anthropic_tools,
+                _retry_count=_retry_count + 1,
+            ):
+                yield chunk
+            return
 
         # H5 fix: detect suppression in pure text Anthropic responses.
         # Tool-enabled requests are already guarded mid-stream by iter_deltas via

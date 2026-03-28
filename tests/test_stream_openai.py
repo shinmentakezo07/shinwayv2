@@ -324,6 +324,25 @@ async def test_openai_stream_abort_error_yields_done(monkeypatch):
     # Must not have raised — if we got here the exception was caught internally
 
 
+# ── tool_choice=required helper ─────────────────────────────────────────────
+
+def test_tool_choice_required_helper_true_for_required():
+    from pipeline.stream_openai import _tool_choice_requires_call
+    assert _tool_choice_requires_call("required") is True
+    assert _tool_choice_requires_call("any") is True
+    assert _tool_choice_requires_call({"type": "function"}) is True
+    assert _tool_choice_requires_call({"type": "tool"}) is True
+    assert _tool_choice_requires_call({"type": "any"}) is True
+
+
+def test_tool_choice_required_helper_false_for_auto():
+    from pipeline.stream_openai import _tool_choice_requires_call
+    assert _tool_choice_requires_call("auto") is False
+    assert _tool_choice_requires_call("none") is False
+    assert _tool_choice_requires_call(None) is False
+    assert _tool_choice_requires_call({"type": "none"}) is False
+
+
 # ── Fix A: diagnostic log when marker seen with no tool emitter ───────────────
 
 async def test_openai_stream_warns_when_marker_detected_without_tool_emitter(monkeypatch, caplog):
