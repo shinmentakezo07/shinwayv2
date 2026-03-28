@@ -98,6 +98,15 @@ def _build_tool_call_results(
 
         # INVARIANT: arguments is always a JSON string
         arg_str = msgjson.encode(args_dict).decode("utf-8")
+        from config import settings
+        if len(arg_str) > settings.max_tool_args_bytes:
+            log.warning(
+                "tool_args_oversized_dropped",
+                tool=name,
+                size=len(arg_str),
+                limit=settings.max_tool_args_bytes,
+            )
+            continue
         # Preserve any id that was already present in the parsed payload;
         # only generate a fresh id when none exists.  This is the single
         # canonical assignment point — downstream code must not re-generate.

@@ -86,3 +86,31 @@ def test_id_assigned():
         streaming=False,
     )
     assert result[0]["id"].startswith("call_")
+
+
+def test_oversized_args_dropped(monkeypatch) -> None:
+    import json
+    from config import settings
+    monkeypatch.setattr(settings, "max_tool_args_bytes", 10)
+    big_args = json.dumps({"command": "x" * 100})
+    merged = [{"name": "Bash", "arguments": big_args}]
+    result = _build_tool_call_results(
+        merged=merged,
+        allowed_exact=_allowed([_tool("Bash", command="string")]),
+        schema_map=_schema_map([_tool("Bash", command="string")]),
+        streaming=False,
+    )
+    assert result == []
+
+
+def test_normal_args_pass() -> None:
+    import json
+    merged = [{"name": "Bash", "arguments": json.dumps({"command": "ls"})}]
+    result = _build_tool_call_results(
+        merged=merged,
+        allowed_exact=_allowed([_tool("Bash", command="string")]),
+        schema_map=_schema_map([_tool("Bash", command="string")]),
+        streaming=False,
+    )
+    assert len(result) == 1
+    assert result[0]["function"]["name"] == "Bash"
