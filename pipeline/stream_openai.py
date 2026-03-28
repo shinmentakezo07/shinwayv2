@@ -114,11 +114,14 @@ async def _openai_stream(
     model = params.model
     started = time.time()
     created_ts = int(started)
+    from pipeline.context import PipelineContext
+    _ctx = PipelineContext(request_id=params.request_id)
 
     pkg = _pkg()
     input_tokens = pkg.count_message_tokens(params.messages, model)
 
     # Role chunk
+    _ctx.record_ttft()
     yield openai_sse(openai_chunk(cid, model, delta={"role": "assistant"}, created=created_ts))
 
     acc = ""
@@ -344,14 +347,14 @@ async def _openai_stream(
         output_tokens = pkg.estimate_from_text(acc, model)
         yield openai_usage_chunk(cid, model, input_tokens, output_tokens)
         yield openai_done()
-        await pkg._record(params, acc, (time.time() - started) * 1000.0)
+        await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
         return
     except TimeoutError as exc:
         log.debug("stream_timeout", style="openai", model=model, message=exc.message)
         yield openai_sse(exc.to_openai())
         yield openai_done()
         # H3 fix: record timed-out requests so analytics and budget tracking are accurate
-        await pkg._record(params, acc, (time.time() - started) * 1000.0)
+        await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
         return
     except Exception:
         log.exception("stream_error", style="openai", model=model)
@@ -360,7 +363,7 @@ async def _openai_stream(
         )
         yield openai_done()
         # H6 fix: record errored requests so analytics and budget tracking are accurate
-        await pkg._record(params, acc, (time.time() - started) * 1000.0)
+        await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
         return
 
     # Finish + usage
@@ -377,4 +380,4 @@ async def _openai_stream(
         _gen_s = _total_s - (_ttft_ms or 0) / 1000.0
         if _gen_s > 0:
             _output_tps = output_tokens / _gen_s
-    await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_ttft_ms, output_tps=_output_tps)
+    await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_ttft_ms, output_tps=_output_tps, context=_ctx)

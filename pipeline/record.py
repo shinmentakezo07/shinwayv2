@@ -1,12 +1,17 @@
 """Analytics recording helper and provider detection."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from analytics import RequestLog, analytics, estimate_cost
 from config import settings
 from tokens import count_message_tokens, estimate_from_text
 from pipeline.params import PipelineParams
+
+if TYPE_CHECKING:
+    from pipeline.context import PipelineContext
 
 
 log = structlog.get_logger()
@@ -28,8 +33,12 @@ async def _record(
     cache_hit: bool = False,
     ttft_ms: int | None = None,
     output_tps: float | None = None,
+    context: "PipelineContext | None" = None,
 ) -> None:
     """Record request analytics. Provider is auto-detected from model."""
+    effective_ttft = (context.ttft_ms if context else None) or ttft_ms
+    effective_latency = context.latency_ms() if context else latency_ms
+
     provider = _provider_from_model(params.model)
     # Fix #6: use count_message_tokens for consistent token counts across streaming and non-streaming
     input_tokens = count_message_tokens(params.messages, params.model)
@@ -43,9 +52,9 @@ async def _record(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost_usd=cost,
-            latency_ms=latency_ms,
+            latency_ms=effective_latency,
             cache_hit=cache_hit,
-            ttft_ms=ttft_ms,
+            ttft_ms=effective_ttft,
             output_tps=output_tps,
         )
     )
@@ -61,8 +70,10 @@ async def _record(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_usd=round(cost, 6),
-        latency_ms=round(latency_ms, 1),
+        latency_ms=round(effective_latency, 1),
         cache_hit=cache_hit,
-        ttft_ms=ttft_ms,
+        ttft_ms=effective_ttft,
         output_tps=round(output_tps, 2) if output_tps else None,
+        suppression_attempts=context.suppression_attempts if context else 0,
+        tool_calls_parsed=context.tool_calls_parsed if context else 0,
     )

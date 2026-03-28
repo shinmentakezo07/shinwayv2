@@ -52,9 +52,12 @@ async def _anthropic_stream(
     mid = f"msg_{uuid.uuid4().hex[:24]}"
     model = params.model
     started = time.time()
+    from pipeline.context import PipelineContext
+    _ctx = PipelineContext(request_id=params.request_id)
 
     pkg = _pkg()
     input_tokens = pkg.count_message_tokens(params.messages, model)
+    _ctx.record_ttft()
     yield anthropic_message_start(mid, model, input_tokens)
 
     acc = ""
@@ -230,13 +233,13 @@ async def _anthropic_stream(
         output_tokens = pkg.estimate_from_text(acc, model)
         yield anthropic_message_delta("end_turn", output_tokens)
         yield anthropic_message_stop()
-        await pkg._record(params, acc, (time.time() - started) * 1000.0)
+        await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
         return
     except TimeoutError as exc:
         log.debug("stream_timeout", style="anthropic", model=model, message=exc.message)
         yield anthropic_sse_event("error", exc.to_anthropic())
         # H4 fix: record timed-out requests so analytics and budget tracking are accurate
-        await pkg._record(params, acc, (time.time() - started) * 1000.0)
+        await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
         return
     except Exception as exc:
         log.exception("stream_error", style="anthropic", model=model)
@@ -245,7 +248,7 @@ async def _anthropic_stream(
             {"type": "error", "error": {"type": "api_error", "message": str(exc)[:200]}},
         )
         # H7 fix: record errored requests so analytics and budget tracking are accurate
-        await pkg._record(params, acc, (time.time() - started) * 1000.0)
+        await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
         return
 
     # Close blocks
@@ -300,7 +303,7 @@ async def _anthropic_stream(
                     _an_gen_s = _an_total_s - (_an_ttft or 0) / 1000.0
                     if _an_gen_s > 0:
                         _an_tps = output_tokens / _an_gen_s
-                await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_an_ttft, output_tps=_an_tps)
+                await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_an_ttft, output_tps=_an_tps, context=_ctx)
                 return
 
         # tool_choice=required but no calls were parsed — retry with a nudge
@@ -346,7 +349,7 @@ async def _anthropic_stream(
                     "message": "Upstream returned a restricted response. Please retry.",
                 }},
             )
-            await pkg._record(params, acc, (time.time() - started) * 1000.0)
+            await pkg._record(params, acc, (time.time() - started) * 1000.0, context=_ctx)
             return
 
         if text_opened:
@@ -363,4 +366,4 @@ async def _anthropic_stream(
         _an_gen_s = _an_total_s - (_an_ttft or 0) / 1000.0
         if _an_gen_s > 0:
             _an_tps = output_tokens / _an_gen_s
-    await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_an_ttft, output_tps=_an_tps)
+    await pkg._record(params, acc, (time.time() - started) * 1000.0, ttft_ms=_an_ttft, output_tps=_an_tps, context=_ctx)

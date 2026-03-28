@@ -52,6 +52,8 @@ async def handle_openai_non_streaming(
     anthropic_tools: list[dict] | None,
 ) -> dict:
     """Handle a non-streaming OpenAI request."""
+    from pipeline.context import PipelineContext
+    _ctx = PipelineContext(request_id=params.request_id)
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
 
     # Cache check — bypassed when tools present (SHINWAY_CACHE_TOOL_REQUESTS=false)
@@ -72,7 +74,7 @@ async def handle_openai_non_streaming(
     if response_cache.should_cache(params.tools):
         cached = await response_cache.aget(cache_key)
         if cached is not None:
-            await _record(params, "", 0.0, cache_hit=True)
+            await _record(params, "", 0.0, cache_hit=True, context=_ctx)
             return _freshen_cached_response(cached, "openai")
 
     started = time.time()
@@ -160,7 +162,7 @@ async def handle_openai_non_streaming(
         output_tokens=output_tokens,
     )
 
-    await _record(params, visible_text or text, latency_ms, ttft_ms=int(latency_ms))
+    await _record(params, visible_text or text, latency_ms, ttft_ms=int(latency_ms), context=_ctx)
     if response_cache.should_cache(params.tools):
         await response_cache.aset(cache_key, resp)
     return resp
@@ -172,6 +174,8 @@ async def handle_anthropic_non_streaming(
     anthropic_tools: list[dict] | None,
 ) -> dict:
     """Handle a non-streaming Anthropic request."""
+    from pipeline.context import PipelineContext
+    _ctx = PipelineContext(request_id=params.request_id)
     mid = f"msg_{uuid.uuid4().hex[:24]}"
 
     # Cache check — bypassed when tools present (SHINWAY_CACHE_TOOL_REQUESTS=false)
@@ -192,7 +196,7 @@ async def handle_anthropic_non_streaming(
     if response_cache.should_cache(params.tools):
         cached = await response_cache.aget(cache_key)
         if cached is not None:
-            await _record(params, "", 0.0, cache_hit=True)
+            await _record(params, "", 0.0, cache_hit=True, context=_ctx)
             return _freshen_cached_response(cached, "anthropic")
 
     started = time.time()
@@ -272,7 +276,7 @@ async def handle_anthropic_non_streaming(
         output_tokens=output_tokens,
     )
 
-    await _record(params, text, latency_ms, ttft_ms=int(latency_ms))
+    await _record(params, text, latency_ms, ttft_ms=int(latency_ms), context=_ctx)
     if response_cache.should_cache(params.tools):
         await response_cache.aset(cache_key, resp)
     return resp

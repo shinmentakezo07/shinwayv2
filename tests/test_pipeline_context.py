@@ -35,3 +35,29 @@ def test_increment_suppression():
     ctx = PipelineContext(request_id="req-5")
     ctx.suppression_attempts += 1
     assert ctx.suppression_attempts == 1
+
+
+import asyncio
+from unittest.mock import AsyncMock, patch
+from pipeline.params import PipelineParams
+
+
+def _params():
+    return PipelineParams(
+        api_style="openai",
+        model="claude-3-5-sonnet",
+        messages=[],
+        cursor_messages=[],
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_uses_context_latency():
+    ctx = PipelineContext(request_id="r1")
+    ctx.ttft_ms = 42
+    params = _params()
+    with patch("pipeline.record.analytics") as mock_analytics:
+        mock_analytics.record = AsyncMock()
+        from pipeline.record import _record
+        await _record(params, "hello", latency_ms=0.0, context=ctx)
+        assert mock_analytics.record.called
