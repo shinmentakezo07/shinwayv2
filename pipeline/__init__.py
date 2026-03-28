@@ -40,6 +40,8 @@ from pipeline.stream_anthropic import _anthropic_stream
 from pipeline.nonstream import handle_openai_non_streaming, handle_anthropic_non_streaming
 from pipeline.response_validator import validate_openai_response, validate_anthropic_response  # noqa: F401
 from pipeline.tracer import PipelineTracer  # noqa: F401
+from pipeline.hooks import HookRegistry, PipelineHook, hook_registry  # noqa: F401
+from pipeline.middleware import run_pipeline_middleware  # noqa: F401
 
 __all__ = [
     "PipelineParams",
@@ -51,4 +53,8 @@ __all__ = [
     "validate_openai_response",
     "validate_anthropic_response",
     "PipelineTracer",
+    "HookRegistry",
+    "PipelineHook",
+    "hook_registry",
+    "run_pipeline_middleware",
 ]
