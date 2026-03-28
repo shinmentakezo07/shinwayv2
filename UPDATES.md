@@ -5506,3 +5506,31 @@ Comprehensive wiring and dead-code audit of all 6 new pipeline modules added acr
 | SHA | Description |
 |---|---|
 | 8f08fb52 | fix(pipeline/tracer): remove unused `field` import — ruff F401 |
+
+## Session 165 — converters gap-fix: _safe_pct extraction + __init__.py public API (2026-03-28)
+
+### What changed
+- `converters/shared.py` — created: single canonical `_safe_pct` function
+- `converters/from_cursor_openai.py` — removed local `_safe_pct` def, added `from converters.shared import _safe_pct`
+- `converters/from_cursor_anthropic.py` — same removal + import
+- `converters/from_cursor.py` — same removal + import
+- `converters/__init__.py` — populated with full public API re-exports (was 0 bytes)
+- `tests/test_converters_shared.py` — created: 5 unit tests for `_safe_pct`
+- `tests/test_converters_init.py` — created: 8 import-surface tests for `converters` package
+
+### Which lines / functions
+- `converters/shared.py:_safe_pct` — new canonical definition
+- `converters/from_cursor_openai.py:9-12` — removed local `_safe_pct`, added import
+- `converters/from_cursor_anthropic.py:9-12` — same
+- `converters/from_cursor.py:34-38` — same
+- `converters/__init__.py` — full re-export block: `openai_to_cursor`, `anthropic_to_cursor`, `build_tool_instruction`, `_msg`, `openai_chunk`, `openai_sse`, `openai_done`, `openai_non_streaming_response`, `openai_usage_chunk`, `anthropic_sse_event`, `anthropic_message_start`, `anthropic_content_block_start/delta/stop`, `anthropic_message_delta/stop`, `anthropic_non_streaming_response`, `convert_tool_calls_to_anthropic`, `sanitize_visible_text`, `split_visible_reasoning`, `scrub_support_preamble`, `_safe_pct`
+
+### Why
+- `_safe_pct` was defined identically in 3 separate files — extracted to eliminate duplication and single-source the implementation
+- `converters/__init__.py` was empty — populated so callers can `from converters import X` without knowing internal submodule layout; submodule structure is now an implementation detail
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| 20e02f84 | refactor(converters): extract _safe_pct to converters/shared.py — eliminate 3x duplication |
+| 2d0eb0ab | feat(converters): public API surface in __init__.py — stable package imports |
