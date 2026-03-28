@@ -5416,3 +5416,28 @@ Gap audit of the tool-call extraction pipeline identified 8 missing behaviours: 
 | SHA | Description |
 |---|
 | 06552978 | feat(admin-ui/login): redesigned login page — node graph bg, terminal feed, lock ring, CSS module |
+
+## Session 162 — HookRegistry + run_pipeline_middleware (2026-03-28)
+
+### What changed
+- `pipeline/hooks.py` — created
+- `pipeline/middleware.py` — created
+- `pipeline/__init__.py` — added exports for `HookRegistry`, `PipelineHook`, `hook_registry`, `run_pipeline_middleware`
+- `tests/test_pipeline_hooks.py` — created (8 tests)
+- `tests/test_pipeline_middleware.py` — created (6 tests)
+
+### Which lines / functions
+- `pipeline/hooks.py:PipelineHook` — `@runtime_checkable` Protocol with four async checkpoints: `before_request`, `after_response`, `on_tool_calls`, `on_suppression`
+- `pipeline/hooks.py:HookRegistry` — `register()`, `run_before_request()`, `run_after_response()`, `run_on_tool_calls()`, `run_on_suppression()`; module-level `hook_registry` singleton
+- `pipeline/middleware.py:run_pipeline_middleware()` — async function; runs context window preflight via `context_engine.check_preflight()` before every upstream call; raises `ContextWindowError` on hard limit breach; returns `PipelineParams` unchanged on success
+- `pipeline/__init__.py` — appended imports from `pipeline.hooks` and `pipeline.middleware`; added `HookRegistry`, `PipelineHook`, `hook_registry`, `run_pipeline_middleware` to `__all__`
+
+### Why
+Task 5: `HookRegistry` provides a purely additive hook extension point — register hooks at app startup; pipeline works identically with zero hooks registered. Hooks need not implement every checkpoint — missing methods are silently skipped.
+Task 6: `run_pipeline_middleware` centralises pre-call guards (currently: context window preflight) so every code path (streaming/non-streaming, OpenAI/Anthropic) passes through a single choke point rather than duplicating guard logic.
+
+### Commit SHAs
+| SHA | Description |
+|---|---|
+| e5561b7f | feat(pipeline/hooks): HookRegistry + PipelineHook protocol — lifecycle hooks |
+| 210cd4da | feat(pipeline/middleware): run_pipeline_middleware — consolidated pre-call guard chain |
