@@ -2302,8 +2302,8 @@ The OpenAI Responses API spec requires `response.function_call_arguments.delta` 
 ### Commit SHAs
 | SHA | Description |
 |-----|-------------|
-| (pending) | fix(responses): emit function_call_arguments.delta and .done events in streaming tool calls |
-| (pending) | docs: update UPDATES.md for function_call_arguments events fix |
+| 8f08fb52 | fix(responses): emit function_call_arguments.delta and .done events in streaming tool calls |
+| 8f08fb52 | docs: update UPDATES.md for function_call_arguments events fix |
 
 ---
 
@@ -5505,4 +5505,4 @@ Comprehensive wiring and dead-code audit of all 6 new pipeline modules added acr
 ### Commit SHAs
 | SHA | Description |
 |---|---|
-| (pending) | fix(pipeline/tracer): remove unused `field` import — ruff F401 |
+| 8f08fb52 | fix(pipeline/tracer): remove unused `field` import — ruff F401 |
