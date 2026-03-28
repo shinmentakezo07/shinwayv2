@@ -5441,3 +5441,32 @@ Task 6: `run_pipeline_middleware` centralises pre-call guards (currently: contex
 |---|---|
 | e5561b7f | feat(pipeline/hooks): HookRegistry + PipelineHook protocol — lifecycle hooks |
 | 210cd4da | feat(pipeline/middleware): run_pipeline_middleware — consolidated pre-call guard chain |
+
+## Session 163 — StreamPhase enum + StreamStateTracker (2026-03-28)
+
+### What changed
+
+| File | Change |
+|---|---|
+| `pipeline/stream_state.py` | New: `StreamPhase` str-enum (8 phases) + `StreamStateTracker` — explicit streaming state machine |
+| `tests/test_stream_state.py` | New: 8 unit tests covering initial state, transitions, history recording, terminal detection, and str comparability |
+| `pipeline/__init__.py` | Added `StreamPhase` and `StreamStateTracker` to imports and `__all__` |
+
+### Which lines / functions
+
+- `pipeline/stream_state.py:StreamPhase` — `str, Enum` with 8 members: `INIT`, `STREAMING_TEXT`, `MARKER_DETECTED`, `PARSING_TOOL_JSON`, `TOOL_COMPLETE`, `FINISHED`, `SUPPRESSED`, `ABANDONED`
+- `pipeline/stream_state.py:_TERMINAL_PHASES` — module-level frozenset of terminal phases (`FINISHED`, `SUPPRESSED`, `ABANDONED`)
+- `pipeline/stream_state.py:StreamStateTracker` — `__init__`, `phase` property, `history` property (returns copy), `transition()`, `is_terminal()`
+- `pipeline/__init__.py` — appended `from pipeline.stream_state import StreamPhase, StreamStateTracker` and extended `__all__`
+
+### Why
+
+Streaming generators (`stream_openai.py`, `stream_anthropic.py`) tracked phase via scattered boolean locals (`in_tool_call`, `suppressed`, etc.). `StreamPhase` makes the state machine explicit, self-documenting, and independently unit-testable without touching the HTTP layer. `StreamStateTracker` records full transition history for debugging.
+
+Full non-integration suite: 1129 passed, 0 failures. All 6 new pipeline module imports verified clean.
+
+### Commit SHAs
+
+| SHA | Description |
+|---|---|
+| 2112f8e4 | feat(pipeline/stream_state): StreamPhase enum + StreamStateTracker — explicit streaming state |
