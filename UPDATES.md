@@ -5534,3 +5534,30 @@ Comprehensive wiring and dead-code audit of all 6 new pipeline modules added acr
 |---|---|
 | 20e02f84 | refactor(converters): extract _safe_pct to converters/shared.py — eliminate 3x duplication |
 | 2d0eb0ab | feat(converters): public API surface in __init__.py — stable package imports |
+
+## Session 166 — Converters Gap Fixes (2026-03-28)
+
+### What changed
+
+| File | Change |
+|---|---|
+| `converters/shared.py` | New: `_safe_pct` — single canonical definition, eliminates 3x duplication |
+| `converters/__init__.py` | New: public API surface — stable package imports |
+| `converters/message_normalizer.py` | New: `normalize_openai_messages` + `normalize_anthropic_messages` |
+| `converters/from_cursor_openai.py` | Removed local `_safe_pct` — imports from shared |
+| `converters/from_cursor_anthropic.py` | Same |
+| `converters/from_cursor.py` | Same |
+| `tests/test_converters_shared.py` | New |
+| `tests/test_converters_init.py` | New |
+| `tests/test_message_normalizer.py` | New |
+| `tests/test_converters_responses.py` | New |
+
+### Why
+
+`_safe_pct` was defined identically in 3 files. `converters/__init__.py` was empty, forcing consumers to know submodule paths. The message normalizer covers null/missing content edge cases before they reach the converters. Responses API converters had no standalone unit tests.
+
+### Commit SHAs
+
+| SHA | Description |
+|---|---|
+| 3a58b78c | test(converters): unit tests for to_responses.py and from_responses.py |
