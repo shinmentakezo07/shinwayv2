@@ -173,7 +173,7 @@ function ManagedKeyCard({ mk, index, onToggle, onDelete, usageStats }: {
         {/* Right — status badge + created */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
           <span className={active ? 'kp-badge-active' : 'kp-badge-disabled'}>
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: active ? 'rgba(255,255,255,0.7)' : 'rgba(192,80,65,1)', flexShrink: 0 }} />
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: active ? '#00e5a0' : 'rgba(192,80,65,1)', flexShrink: 0 }} />
             {active ? 'ACTIVE' : 'DISABLED'}
           </span>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.04em' }}>
@@ -420,21 +420,28 @@ export default function KeysPage() {
       />
 
       {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h2 className="kp-page-title">API Keys</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="live-dot" />
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--mono)' }}>
-              {data.length} usage key{data.length !== 1 ? 's' : ''} · {managedKeys.length} managed · refreshed every 5s
-            </p>
+      <div className="kp-page-header">
+        <div className="kp-header-left">
+          <div className="kp-title-row">
+            <h2 className="kp-page-title">API Keys</h2>
+            <div className="kp-live-badge">
+              <span className="kp-live-dot" aria-hidden />
+              <span className="kp-live-badge-txt">LIVE</span>
+            </div>
           </div>
+          <p className="kp-page-meta">
+            <span className="kp-meta-count">{data.length}</span> usage key{data.length !== 1 ? 's' : ''}
+            <span className="kp-meta-sep">·</span>
+            <span className="kp-meta-count">{managedKeys.length}</span> managed
+            <span className="kp-meta-sep">·</span>
+            5s refresh
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={exportCSV} className="btn btn-ghost" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="kp-header-actions">
+          <button onClick={exportCSV} className="kp-btn-ghost">
             <Download size={13} /> Export CSV
           </button>
-          <button onClick={() => setCreateOpen(true)} className="btn btn-accent" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setCreateOpen(true)} className="kp-btn-create">
             <Plus size={13} /> New Key
           </button>
         </div>
@@ -472,7 +479,11 @@ export default function KeysPage() {
                 total_tokens: s.estimated_input_tokens + s.estimated_output_tokens,
               } : null
               return (
-                <ManagedKeyCard key={mk.key} mk={mk} index={i} onToggle={handleToggle} onDelete={handleDelete} usageStats={usageStats} />
+                <ManagedKeyCard
+                  key={mk.key} mk={mk} index={i}
+                  onToggle={handleToggle} onDelete={handleDelete}
+                  usageStats={usageStats}
+                />
               )
             })}
           </div>
@@ -633,34 +644,89 @@ export default function KeysPage() {
 
 // ── Scoped styles ─────────────────────────────────────────────────────────────
 const CSS = `
+  /* ── Page header ── */
+  .kp-page-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .kp-header-left { display: flex; flex-direction: column; gap: 7px; }
+  .kp-title-row { display: flex; align-items: center; gap: 12px; }
   .kp-page-title {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: -0.6px;
-    margin-bottom: 6px;
-    font-family: var(--mono);
+    font-size: 24px; font-weight: 700;
+    color: rgba(255,255,255,0.94);
+    letter-spacing: -0.7px; margin: 0;
+    font-family: var(--sans);
+  }
+  .kp-live-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 9px; border-radius: 999px;
+    background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.2);
+  }
+  .kp-live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #00e5a0;
+    box-shadow: 0 0 7px rgba(0,229,160,0.7);
+    flex-shrink: 0;
+    animation: kp-pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes kp-pulse {
+    0%,100% { opacity:1; box-shadow: 0 0 7px rgba(0,229,160,0.7); }
+    50%      { opacity:0.4; box-shadow: 0 0 3px rgba(0,229,160,0.3); }
+  }
+  .kp-live-badge-txt {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em;
+    color: rgba(0,229,160,0.8); font-family: var(--mono);
+    text-transform: uppercase;
+  }
+  .kp-page-meta {
+    font-size: 12px; color: rgba(255,255,255,0.25);
+    font-family: var(--mono); margin: 0;
+  }
+  .kp-meta-count { color: rgba(255,255,255,0.6); font-weight: 600; }
+  .kp-meta-sep { color: rgba(255,255,255,0.1); margin: 0 6px; }
+  .kp-header-actions { display: flex; gap: 8px; align-self: center; }
+  .kp-btn-ghost {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 9px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-size: 12px; font-weight: 500;
+    color: rgba(255,255,255,0.4); font-family: var(--sans);
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .kp-btn-ghost:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
+  .kp-btn-create {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 16px; border-radius: 9px;
+    background: rgba(0,229,160,0.12);
+    border: 1px solid rgba(0,229,160,0.28);
+    font-size: 12px; font-weight: 700;
+    color: #00e5a0; font-family: var(--sans);
+    cursor: pointer;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .kp-btn-create:hover {
+    background: rgba(0,229,160,0.2);
+    box-shadow: 0 0 18px rgba(0,229,160,0.15);
   }
 
   .kp-section-div {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    display: flex; align-items: center; gap: 12px;
     margin: 28px 0 16px;
   }
   .kp-section-label {
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: rgba(255,255,255,0.3);
-    white-space: nowrap;
+    font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.3); white-space: nowrap;
     font-family: var(--mono);
+    padding: 2px 8px; border-radius: 4px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
   }
   .kp-section-line {
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent 70%);
+    flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent 75%);
   }
 
   .kp-summary-grid {
@@ -813,8 +879,8 @@ const CSS = `
     background-color: rgba(255,255,255,0.03);
   }
   .kp-row-selected {
-    background-color: rgba(255,255,255,0.04);
-    border-left: 2px solid rgba(255,255,255,0.6);
+    background-color: rgba(0,229,160,0.03);
+    border-left: 2px solid rgba(0,229,160,0.65);
   }
   .kp-row-selected:hover {
     background-color: rgba(255,255,255,0.04);
@@ -828,18 +894,13 @@ const CSS = `
   }
 
   .kp-badge-active {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    font-family: var(--mono);
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: rgba(255,255,255,0.75);
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 999px;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.1em; font-family: var(--mono);
+    background: rgba(0,229,160,0.08);
+    border: 1px solid rgba(0,229,160,0.22);
+    color: rgba(0,229,160,0.85);
   }
   .kp-badge-disabled {
     display: inline-flex;
@@ -955,7 +1016,7 @@ const CSS = `
     transform: translateY(-1px);
   }
   .mkc-card-active {
-    border-color: rgba(255,255,255,0.10);
+    border-color: rgba(0,229,160,0.14);
   }
   .mkc-card-disabled {
     opacity: 0.58;
@@ -969,7 +1030,7 @@ const CSS = `
     inset: 0;
     border-radius: 16px;
     pointer-events: none;
-    background: radial-gradient(ellipse 60% 30% at 50% 0%, rgba(255,255,255,0.04) 0%, transparent 70%);
+    background: radial-gradient(ellipse 60% 30% at 50% 0%, rgba(0,229,160,0.05) 0%, transparent 65%);
     animation: mkc-breathe 4s ease-in-out infinite;
   }
   @keyframes mkc-breathe {
@@ -992,13 +1053,13 @@ const CSS = `
     flex-shrink: 0;
   }
   .mkc-status-dot-active {
-    background: rgba(255,255,255,0.75);
-    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 8px rgba(255,255,255,0.15);
-    animation: mkc-dot-pulse 3s ease-in-out infinite;
+    background: #00e5a0;
+    box-shadow: 0 0 0 2px rgba(0,229,160,0.18), 0 0 8px rgba(0,229,160,0.45);
+    animation: mkc-dot-pulse 2.5s ease-in-out infinite;
   }
   @keyframes mkc-dot-pulse {
-    0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 8px rgba(255,255,255,0.15); }
-    50%       { box-shadow: 0 0 0 3px rgba(255,255,255,0.06), 0 0 14px rgba(255,255,255,0.08); }
+    0%, 100% { box-shadow: 0 0 0 2px rgba(0,229,160,0.18), 0 0 8px rgba(0,229,160,0.45); }
+    50%       { box-shadow: 0 0 0 3px rgba(0,229,160,0.08), 0 0 14px rgba(0,229,160,0.2); }
   }
 
   /* Header */
