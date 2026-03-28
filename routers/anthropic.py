@@ -31,6 +31,7 @@ from pipeline import (
 )
 from routers.model_router import resolve_model
 from tokens import count_message_tokens, estimate_from_text
+from converters.message_normalizer import normalize_anthropic_messages
 from tools.normalize import normalize_anthropic_tools, to_anthropic_tool_format, validate_tool_choice
 from utils.context import context_engine
 from validators.request import validate_anthropic_payload
@@ -154,7 +155,7 @@ async def anthropic_messages(
     tool_choice = validate_tool_choice(payload.get("tool_choice", "auto"), tools)
     parallel_tool_calls = bool(payload.get("parallel_tool_calls", True))
 
-    messages_raw = payload.get("messages", [])
+    messages_raw = normalize_anthropic_messages(payload.get("messages", []))
     _raw_max_tokens = payload.get("max_tokens")
     max_tokens: int | None = int(_raw_max_tokens) if _raw_max_tokens is not None else None
     stop_sequences: list[str] = payload.get("stop_sequences") or []

@@ -50,6 +50,7 @@ async def _process_batch(
     from cursor.client import CursorClient
     from pipeline import PipelineParams, handle_openai_non_streaming
     from routers.model_router import resolve_model
+    from converters.message_normalizer import normalize_openai_messages
     from tools.normalize import normalize_openai_tools, validate_tool_choice, to_anthropic_tool_format
 
     await store.update_status(batch_id, status="in_progress")
@@ -73,7 +74,7 @@ async def _process_batch(
 
         try:
             item_model = resolve_model(body.get("model") or model)
-            messages = body.get("messages") or []
+            messages = normalize_openai_messages(body.get("messages") or [])
             tools_raw = body.get("tools") or []
             tools = normalize_openai_tools(tools_raw)
             tool_choice = validate_tool_choice(body.get("tool_choice", "auto"), tools)

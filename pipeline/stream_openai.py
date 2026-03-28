@@ -115,6 +115,8 @@ async def _openai_stream(
     started = time.time()
     created_ts = int(started)
     from pipeline.context import PipelineContext
+    from pipeline.middleware import run_pipeline_middleware
+    params = await run_pipeline_middleware(params)
     _ctx = PipelineContext(request_id=params.request_id)
 
     pkg = _pkg()

@@ -30,6 +30,7 @@ from pipeline import (
 )
 from routers.model_router import resolve_model
 from tokens import count_tool_instruction_tokens
+from converters.message_normalizer import normalize_openai_messages
 from tools.normalize import normalize_openai_tools, to_anthropic_tool_format, validate_tool_choice
 from utils.context import context_engine
 from validators.request import validate_openai_payload
@@ -141,7 +142,7 @@ async def chat_completions(
         _ctx.stream = stream
     enforce_allowed_models(key_rec, model)
 
-    messages = payload.get("messages", [])
+    messages = normalize_openai_messages(payload.get("messages", []))
 
     tools_raw = payload.get("tools", [])
     tools = normalize_openai_tools(validate_and_fix_openai_tools(tools_raw) or tools_raw)

@@ -53,6 +53,8 @@ async def _anthropic_stream(
     model = params.model
     started = time.time()
     from pipeline.context import PipelineContext
+    from pipeline.middleware import run_pipeline_middleware
+    params = await run_pipeline_middleware(params)
     _ctx = PipelineContext(request_id=params.request_id)
 
     pkg = _pkg()

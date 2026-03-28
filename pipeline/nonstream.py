@@ -52,6 +52,8 @@ async def handle_openai_non_streaming(
     anthropic_tools: list[dict] | None,
 ) -> dict:
     """Handle a non-streaming OpenAI request."""
+    from pipeline.middleware import run_pipeline_middleware
+    params = await run_pipeline_middleware(params)
     from pipeline.context import PipelineContext
     _ctx = PipelineContext(request_id=params.request_id)
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -176,6 +178,8 @@ async def handle_anthropic_non_streaming(
     anthropic_tools: list[dict] | None,
 ) -> dict:
     """Handle a non-streaming Anthropic request."""
+    from pipeline.middleware import run_pipeline_middleware
+    params = await run_pipeline_middleware(params)
     from pipeline.context import PipelineContext
     _ctx = PipelineContext(request_id=params.request_id)
     mid = f"msg_{uuid.uuid4().hex[:24]}"
