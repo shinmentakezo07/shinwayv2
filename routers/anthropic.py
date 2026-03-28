@@ -21,7 +21,6 @@ from converters.to_cursor_anthropic import (
     parse_system,
 )
 from cursor.client import CursorClient
-from handlers import RequestValidationError
 from middleware.auth import check_budget, enforce_allowed_models, get_key_record, verify_bearer
 from middleware.idempotency import complete, get_or_lock, release, validate_idem_key
 from middleware.rate_limit import enforce_rate_limit, enforce_per_key_rate_limit
@@ -31,7 +30,7 @@ from pipeline import (
     handle_anthropic_non_streaming,
 )
 from routers.model_router import resolve_model
-from tokens import count_message_tokens, count_tool_instruction_tokens, estimate_from_text
+from tokens import count_message_tokens, estimate_from_text
 from tools.normalize import normalize_anthropic_tools, to_anthropic_tool_format, validate_tool_choice
 from utils.context import context_engine
 from validators.request import validate_anthropic_payload

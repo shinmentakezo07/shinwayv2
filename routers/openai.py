@@ -9,8 +9,6 @@ Handles:
 """
 from __future__ import annotations
 
-import litellm
-import msgspec.json as _msgjson
 import structlog
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -31,7 +29,7 @@ from pipeline import (
     handle_openai_non_streaming,
 )
 from routers.model_router import resolve_model
-from tokens import count_message_tokens, count_tool_instruction_tokens, estimate_from_text
+from tokens import count_tool_instruction_tokens
 from tools.normalize import normalize_openai_tools, to_anthropic_tool_format, validate_tool_choice
 from utils.context import context_engine
 from validators.request import validate_openai_payload

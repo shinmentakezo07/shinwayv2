@@ -24,6 +24,7 @@ from pipeline.params import PipelineParams
 from tools.budget import deduplicate_tool_calls as _deduplicate_tool_calls
 from tools.budget import limit_tool_calls as _limit_tool_calls
 from tools.budget import repair_invalid_calls as _repair_invalid_calls
+from tools.budget import sort_calls_by_schema_order as _sort_calls
 from tools.emitter import compute_tool_signature as _compute_tool_signature
 from tools.emitter import stream_anthropic_tool_input as _stream_anthropic_tool_input
 from pipeline.suppress import _is_suppressed
@@ -273,6 +274,7 @@ async def _anthropic_stream(
                 log_tool_calls(final_calls, context="anthropic_stream_finish", request_id=params.request_id)
                 final_calls = _repair_invalid_calls(final_calls, params.tools)
                 final_calls = _deduplicate_tool_calls(final_calls)
+                final_calls = _sort_calls(final_calls, params.tools)
                 for tc in final_calls:
                     fn = tc.get("function", {})
                     sig = _compute_tool_signature(fn)

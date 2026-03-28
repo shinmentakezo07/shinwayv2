@@ -7,8 +7,6 @@ All `arguments` values are guaranteed to be JSON strings on output.
 
 from __future__ import annotations
 
-import re
-import uuid
 from typing import TYPE_CHECKING
 
 import msgspec.json as msgjson
