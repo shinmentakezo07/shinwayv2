@@ -39,11 +39,16 @@ from pipeline.stream_openai import _extract_visible_content, _openai_stream  # n
 from pipeline.stream_anthropic import _anthropic_stream
 from pipeline.nonstream import handle_openai_non_streaming, handle_anthropic_non_streaming
 from pipeline.response_validator import validate_openai_response, validate_anthropic_response  # noqa: F401
+from pipeline.tracer import PipelineTracer  # noqa: F401
 
 __all__ = [
     "PipelineParams",
+    "PipelineContext",
     "_openai_stream",
     "_anthropic_stream",
     "handle_openai_non_streaming",
     "handle_anthropic_non_streaming",
+    "validate_openai_response",
+    "validate_anthropic_response",
+    "PipelineTracer",
 ]
