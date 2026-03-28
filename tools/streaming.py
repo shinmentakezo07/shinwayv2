@@ -49,6 +49,9 @@ class StreamingToolCallParser:
         """Append chunk and return parsed calls when JSON is complete, else None."""
         self.buf += chunk
 
+        if self._json_abandoned:
+            return None
+
         # Phase 1: marker detection
         if not self._marker_confirmed:
             rescan_start = max(0, self._scan_pos - self._LOOKBACK)
