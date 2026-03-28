@@ -48,3 +48,50 @@ def test_id_preserved():
     call = {"id": "call_orig", "type": "function", "function": {"name": "Bash", "arguments": json.dumps({"cmd": "ls"})}}
     repaired, _ = repair_tool_call(call, tools)
     assert repaired["id"] == "call_orig"
+
+
+def test_default_injected_for_missing_required():
+    """Missing required param with schema default must be auto-filled, not marked UNFILLABLE."""
+    tool = {"type": "function", "function": {
+        "name": "Search",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "limit": {"type": "integer", "default": 10},
+        }, "required": ["query", "limit"]},
+    }}
+    call = {"id": "c1", "type": "function",
+            "function": {"name": "Search", "arguments": json.dumps({"query": "hello"})}}
+    repaired, repairs = repair_tool_call(call, [tool])
+    args = json.loads(repaired["function"]["arguments"])
+    assert args["limit"] == 10
+    assert any("limit" in r for r in repairs)
+    assert not any("UNFILLABLE" in r for r in repairs)
+
+
+def test_string_with_default_injected():
+    """String param with explicit default must be filled, not skipped."""
+    tool = {"type": "function", "function": {
+        "name": "Greet",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "default": "World"},
+        }, "required": ["name"]},
+    }}
+    call = {"id": "c2", "type": "function",
+            "function": {"name": "Greet", "arguments": "{}"}}
+    repaired, repairs = repair_tool_call(call, [tool])
+    args = json.loads(repaired["function"]["arguments"])
+    assert args["name"] == "World"
+
+
+def test_unfillable_string_no_default_still_skipped():
+    """String param with no default and no enum must still be UNFILLABLE."""
+    tool = {"type": "function", "function": {
+        "name": "Bash",
+        "parameters": {"type": "object", "properties": {
+            "command": {"type": "string"},
+        }, "required": ["command"]},
+    }}
+    call = {"id": "c3", "type": "function",
+            "function": {"name": "Bash", "arguments": "{}"}}
+    repaired, repairs = repair_tool_call(call, [tool])
+    assert any("UNFILLABLE" in r for r in repairs)
