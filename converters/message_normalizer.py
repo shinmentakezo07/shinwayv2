@@ -71,3 +71,108 @@ def normalize_anthropic_messages(messages: list[dict]) -> list[dict]:
             m["content"] = []
         out.append(m)
     return out
+
+
+_NO_COLLAPSE_ROLES: frozenset[str] = frozenset({"tool", "system"})
+
+
+def collapse_adjacent_same_role(messages: list[dict]) -> list[dict]:
+    """Collapse adjacent messages with the same role into one.
+
+    Rules:
+    - 'tool' and 'system' role messages are NEVER collapsed — each carries
+      distinct metadata (tool_call_id, scope).
+    - Messages with 'tool_calls' on the assistant role are never merged.
+    - Non-dict entries are dropped.
+    - Content is joined with a newline separator.
+
+    This is the general-purpose collapser. Format-specific variants
+    (collapse_openai_messages, collapse_anthropic_messages) apply
+    additional format rules on top.
+
+    Args:
+        messages: Input message list.
+
+    Returns:
+        New list with adjacent same-role messages merged. Input is not mutated.
+    """
+    out: list[dict] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role", "user")
+        if role in _NO_COLLAPSE_ROLES:
+            out.append(deepcopy(msg))
+            continue
+        if msg.get("tool_calls"):
+            out.append(deepcopy(msg))
+            continue
+        if (
+            out
+            and out[-1].get("role") == role
+            and not out[-1].get("tool_calls")
+            and out[-1].get("role") not in _NO_COLLAPSE_ROLES
+        ):
+            prev = out[-1]
+            prev_content = prev.get("content") or ""
+            this_content = msg.get("content") or ""
+            if isinstance(prev_content, str) and isinstance(this_content, str):
+                prev["content"] = (prev_content + "\n" + this_content) if prev_content else this_content
+            else:
+                out.append(deepcopy(msg))
+        else:
+            out.append(deepcopy(msg))
+    return out
+
+
+def collapse_openai_messages(messages: list[dict]) -> list[dict]:
+    """Collapse adjacent same-role OpenAI messages.
+
+    Delegates to collapse_adjacent_same_role which handles
+    tool and system role exclusions. OpenAI-specific: messages
+    with tool_calls are never merged (already enforced).
+
+    Args:
+        messages: OpenAI message list.
+
+    Returns:
+        New list with adjacent same-role messages merged.
+    """
+    return collapse_adjacent_same_role(messages)
+
+
+def collapse_anthropic_messages(messages: list[dict]) -> list[dict]:
+    """Collapse adjacent same-role Anthropic messages.
+
+    Anthropic-specific rule: assistant messages containing tool_use
+    blocks are never merged (they must stay paired with tool_result).
+    All other same-role adjacent messages with string content are merged.
+
+    Args:
+        messages: Anthropic message list.
+
+    Returns:
+        New list with adjacent same-role messages merged.
+    """
+    out: list[dict] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role", "user")
+        content = msg.get("content", [])
+        has_tool_blocks = isinstance(content, list) and any(
+            isinstance(b, dict) and b.get("type") in ("tool_use", "tool_result")
+            for b in content
+        )
+        if role in _NO_COLLAPSE_ROLES or has_tool_blocks:
+            out.append(deepcopy(msg))
+            continue
+        if out and out[-1].get("role") == role:
+            prev = out[-1]
+            prev_content = prev.get("content") or ""
+            this_content = content or ""
+            if isinstance(prev_content, str) and isinstance(this_content, str):
+                prev["content"] = (prev_content + "\n" + this_content) if prev_content else this_content
+                continue
+        out.append(deepcopy(msg))
+    return out
