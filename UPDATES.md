@@ -5659,3 +5659,33 @@ Converters layer had: silent data loss on non-text content blocks, no semantic v
 | 209a2365 | feat(converters): add converter-specific metrics counters and wire into hot paths |
 | 238a34a3 | refactor(converters): regression test pinning both convert_tool_calls_to_anthropic copies agree |
 | 824de350 | feat(converters): export new validator, content_types, and collapse symbols |
+
+## Session 168 — Streaming Pipeline Wiring (2026-03-29)
+
+### What changed
+
+Wired four existing but unused pipeline modules into the live streaming generators. No behavioural changes — purely additive observability and hook activation.
+
+### Files modified
+
+| File | What changed |
+|---|---|
+| `pipeline/stream_openai.py` | Import `StreamStateTracker`, `PipelineTracer`, `hook_registry`; instantiate tracker+tracer per request; INIT→STREAMING_TEXT→MARKER_DETECTED→TOOL_COMPLETE→FINISHED/ABANDONED transitions; `run_on_tool_calls` after `_sort_calls`; `run_on_suppression` before retry nudge; tracer events at stream end |
+| `pipeline/stream_anthropic.py` | Same four wire-ups for Anthropic path |
+
+### Key functions wired
+
+- `pipeline/stream_state.py:StreamStateTracker` — phase transitions now fire at all 5 checkpoints in both generators
+- `pipeline/tracer.py:PipelineTracer` — `record_event("stream_finished")` + `flush()` to structlog at clean completion and abort
+- `pipeline/hooks.py:hook_registry.run_on_tool_calls` — called after `_sort_calls` in both streams; hooks can now inspect/modify final call list
+- `pipeline/hooks.py:hook_registry.run_on_suppression` — called before retry nudge; hooks can now observe suppression events
+
+### Why
+
+`StreamStateTracker`, `PipelineTracer`, and `HookRegistry` were fully implemented and tested in isolation but never called from the actual stream generators. This left the proxy with no structured phase tracking, no per-request span telemetry, and a hook system that registered hooks but never invoked `on_tool_calls` or `on_suppression`.
+
+### Commit SHAs
+
+| SHA | Description |
+|---|---|
+| 5ee38d19 | feat(pipeline): wire StreamStateTracer, PipelineTracer, and hook_registry into streaming generators |
