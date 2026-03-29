@@ -26,6 +26,9 @@ from tools.emitter import OpenAIToolEmitter as _OpenAIToolEmitter
 from tools.parse import _find_marker_pos, log_tool_calls
 from tools.registry import ToolRegistry
 import utils.stream_monitor as _stream_monitor_mod
+from pipeline.hooks import hook_registry
+from pipeline.stream_state import StreamPhase, StreamStateTracker
+from pipeline.tracer import PipelineTracer
 
 
 log = structlog.get_logger()
@@ -118,6 +121,8 @@ async def _openai_stream(
     from pipeline.middleware import run_pipeline_middleware
     params = await run_pipeline_middleware(params)
     _ctx = PipelineContext(request_id=params.request_id)
+    _tracker = StreamStateTracker()
+    _tracer = PipelineTracer(request_id=params.request_id)
 
     pkg = _pkg()
     input_tokens = pkg.count_message_tokens(params.messages, model)
@@ -191,6 +196,8 @@ async def _openai_stream(
                     if safe_end > text_sent:
                         visible_delta = visible_text[text_sent:safe_end]
                         if visible_delta:
+                            if _tracker.phase == StreamPhase.INIT:
+                                _tracker.transition(StreamPhase.STREAMING_TEXT)
                             yield openai_sse(
                                 openai_chunk(cid, model, delta={"content": visible_delta}, created=created_ts)
                             )
@@ -203,9 +210,11 @@ async def _openai_stream(
                 current_calls = _limit_tool_calls(current_calls_raw, params.parallel_tool_calls)
                 if _marker_offset < 0 and _stream_parser._marker_confirmed:
                     _marker_offset = _stream_parser._marker_pos
+                    _tracker.transition(StreamPhase.MARKER_DETECTED)
             else:
                 if _stream_parser and _stream_parser._marker_confirmed and _marker_offset < 0:
                     _marker_offset = _stream_parser._marker_pos
+                    _tracker.transition(StreamPhase.MARKER_DETECTED)
                 current_calls = []
 
             if current_calls:
@@ -253,6 +262,8 @@ async def _openai_stream(
                 if safe_end > text_sent:
                     visible_delta = visible_text[text_sent:safe_end]
                     if visible_delta:
+                        if _tracker.phase == StreamPhase.INIT:
+                            _tracker.transition(StreamPhase.STREAMING_TEXT)
                         yield openai_sse(
                             openai_chunk(cid, model, delta={"content": visible_delta}, created=created_ts)
                         )
@@ -302,6 +313,8 @@ async def _openai_stream(
                 final_calls = _repair_invalid_calls(final_calls, params.tools)
                 final_calls = _deduplicate_tool_calls(final_calls)
                 final_calls = _sort_calls(final_calls, params.tools)
+                final_calls = await hook_registry.run_on_tool_calls(params, final_calls)
+                _tracker.transition(StreamPhase.TOOL_COMPLETE)
                 for chunk in tool_emitter.emit(final_calls):
                     yield chunk
                 finish_reason = "tool_calls"
@@ -313,6 +326,7 @@ async def _openai_stream(
                     and not final_calls
                     and _retry_count < min(settings.retry_attempts, _MAX_TOOL_RETRY_DEPTH)
                 ):
+                    await hook_registry.run_on_suppression(params, attempt=_retry_count)
                     from pipeline.suppress import _with_appended_cursor_message, _msg
                     retry_params = _with_appended_cursor_message(
                         params,
@@ -345,6 +359,8 @@ async def _openai_stream(
     except StreamAbortError:
         # Fix #5: emit finish + done so clients don't hang on abort
         log.info("stream_aborted", style="openai", model=model)
+        _tracker.transition(StreamPhase.ABANDONED)
+        log.debug("pipeline_trace", **_tracer.flush())
         yield openai_sse(openai_chunk(cid, model, finish_reason="stop", created=created_ts))
         output_tokens = pkg.estimate_from_text(acc, model)
         yield openai_usage_chunk(cid, model, input_tokens, output_tokens)
@@ -369,6 +385,8 @@ async def _openai_stream(
         return
 
     # Finish + usage
+    _tracker.transition(StreamPhase.FINISHED)
+    _tracer.record_event("stream_finished", finish_reason=finish_reason, phase=_tracker.phase.value)
     yield openai_sse(openai_chunk(cid, model, finish_reason=finish_reason, created=created_ts))
     output_tokens = pkg.estimate_from_text(acc, model)
     yield openai_usage_chunk(cid, model, input_tokens, output_tokens)

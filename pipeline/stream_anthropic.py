@@ -32,6 +32,9 @@ from pipeline.stream_openai import _tool_choice_requires_call, _MAX_TOOL_RETRY_D
 from tools.parse import _find_marker_pos, log_tool_calls
 from tools.registry import ToolRegistry
 import utils.stream_monitor as _stream_monitor_mod
+from pipeline.hooks import hook_registry
+from pipeline.stream_state import StreamPhase, StreamStateTracker
+from pipeline.tracer import PipelineTracer
 
 
 log = structlog.get_logger()
@@ -56,6 +59,8 @@ async def _anthropic_stream(
     from pipeline.middleware import run_pipeline_middleware
     params = await run_pipeline_middleware(params)
     _ctx = PipelineContext(request_id=params.request_id)
+    _tracker = StreamStateTracker()
+    _tracer = PipelineTracer(request_id=params.request_id)
 
     pkg = _pkg()
     input_tokens = pkg.count_message_tokens(params.messages, model)
@@ -139,6 +144,7 @@ async def _anthropic_stream(
                 _new_calls = _stream_parser.feed(delta_text)
                 if _stream_parser._marker_confirmed and _marker_offset < 0:
                     _marker_offset = _stream_parser._marker_pos
+                    _tracker.transition(StreamPhase.MARKER_DETECTED)
                 # C2 fix: apply parallel_tool_calls limit before iterating
                 _parse_results = _limit_tool_calls(_new_calls or [], params.parallel_tool_calls)
             else:
@@ -156,6 +162,8 @@ async def _anthropic_stream(
                     continue
                 emitted_sigs.add(sig)
                 tool_mode = True
+                if _tracker.phase != StreamPhase.TOOL_COMPLETE:
+                    _tracker.transition(StreamPhase.TOOL_COMPLETE)
 
                 if thinking_opened and not thinking_closed:
                     yield anthropic_content_block_stop(idx)
@@ -209,6 +217,8 @@ async def _anthropic_stream(
                 suppressed = False
 
             if len(safe_text) > text_sent:
+                if _tracker.phase == StreamPhase.INIT:
+                    _tracker.transition(StreamPhase.STREAMING_TEXT)
                 if thinking_opened and not thinking_closed:
                     yield anthropic_content_block_stop(idx)
                     thinking_closed = True
@@ -227,6 +237,8 @@ async def _anthropic_stream(
     except StreamAbortError:
         # Fix #5: close open blocks and emit stop events so clients don't hang
         log.info("stream_aborted", style="anthropic", model=model)
+        _tracker.transition(StreamPhase.ABANDONED)
+        log.debug("pipeline_trace", **_tracer.flush())
         if thinking_opened and not thinking_closed:
             yield anthropic_content_block_stop(idx)
             idx += 1
@@ -280,6 +292,7 @@ async def _anthropic_stream(
                 final_calls = _repair_invalid_calls(final_calls, params.tools)
                 final_calls = _deduplicate_tool_calls(final_calls)
                 final_calls = _sort_calls(final_calls, params.tools)
+                final_calls = await hook_registry.run_on_tool_calls(params, final_calls)
                 for tc in final_calls:
                     fn = tc.get("function", {})
                     sig = _compute_tool_signature(fn)
@@ -315,6 +328,7 @@ async def _anthropic_stream(
             and not final_calls
             and _retry_count < min(settings.retry_attempts, _MAX_TOOL_RETRY_DEPTH)
         ):
+            await hook_registry.run_on_suppression(params, attempt=_retry_count)
             from pipeline.suppress import _with_appended_cursor_message, _msg
             retry_params = _with_appended_cursor_message(
                 params,
@@ -358,6 +372,9 @@ async def _anthropic_stream(
             yield anthropic_content_block_stop(idx)
         yield anthropic_message_delta("end_turn", output_tokens)
 
+    _tracker.transition(StreamPhase.FINISHED)
+    _tracer.record_event("stream_finished", tool_mode=tool_mode, phase=_tracker.phase.value)
+    log.debug("pipeline_trace", **_tracer.flush())
     yield anthropic_message_stop()
 
     _an_stats = monitor.stats()
