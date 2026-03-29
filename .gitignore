@@ -23,6 +23,7 @@ caht/
 
 # Claude worktrees
 .claude/worktrees/
+.worktrees/
 
 # Factory
 .factory/
