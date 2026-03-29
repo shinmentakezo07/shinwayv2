@@ -61,6 +61,8 @@ def _extract_text(content) -> str:
                             "extract_text_dropped_non_text_block",
                             block_type=btype,
                         )
+                        from tools.metrics import inc_converter_non_text_block_dropped
+                        inc_converter_non_text_block_dropped(block_type=btype)
             elif isinstance(part, str):
                 parts.append(part)
         return "".join(parts)

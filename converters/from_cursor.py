@@ -244,6 +244,8 @@ def convert_tool_calls_to_anthropic(tool_calls: list[dict]) -> list[dict]:
         return converter(tool_calls)
     except Exception as exc:
         log.warning("litellm_anthropic_tool_use_conversion_failed", error=str(exc))
+        from tools.metrics import inc_converter_litellm_fallback
+        inc_converter_litellm_fallback()
         # Fall back: now parse arguments to dict for manual path
         for tc in tool_calls:
             fn = tc.get("function")
@@ -310,6 +312,9 @@ def scrub_support_preamble(text: str) -> tuple[str, bool]:
     """
     cleaned, count = _SUPPORT_PREAMBLE_RE.subn("", text)
     cleaned = _scrub_the_editor(cleaned).strip()
+    if count > 0:
+        from tools.metrics import inc_converter_support_preamble_scrubbed
+        inc_converter_support_preamble_scrubbed()
     return cleaned, count > 0
 
 

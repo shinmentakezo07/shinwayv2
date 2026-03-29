@@ -20,6 +20,28 @@ def test_inc_schema_validation_no_error():
     inc_schema_validation("failed")
 
 
+from tools.metrics import (
+    inc_converter_non_text_block_dropped,
+    inc_converter_tool_id_synthesized,
+    inc_converter_support_preamble_scrubbed,
+    inc_converter_litellm_fallback,
+)
+
+
+class TestConverterMetrics:
+    def test_inc_converter_non_text_block_dropped_callable(self) -> None:
+        inc_converter_non_text_block_dropped(block_type="image_url")
+
+    def test_inc_converter_tool_id_synthesized_callable(self) -> None:
+        inc_converter_tool_id_synthesized()
+
+    def test_inc_converter_support_preamble_scrubbed_callable(self) -> None:
+        inc_converter_support_preamble_scrubbed()
+
+    def test_inc_converter_litellm_fallback_callable(self) -> None:
+        inc_converter_litellm_fallback()
+
+
 def test_all_functions_callable():
     assert callable(inc_parse_outcome)
     assert callable(inc_tool_repair)

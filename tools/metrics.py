@@ -40,3 +40,42 @@ def inc_schema_validation(result: str, count: int = 1) -> None:
     No-op until wired into external metrics backend.
     """
     pass
+
+
+def inc_converter_non_text_block_dropped(block_type: str, count: int = 1) -> None:
+    """Increment counter for non-text content blocks silently dropped in _extract_text.
+
+    block_type: the content block type that was dropped (e.g. 'image_url', 'audio').
+    No-op until wired into external metrics backend.
+    """
+    pass
+
+
+def inc_converter_tool_id_synthesized(count: int = 1) -> None:
+    """Increment counter for tool call IDs synthesized due to missing id field.
+
+    Tracks how often clients send tool calls without IDs — pipeline invariant
+    violation that we recover from silently.
+    No-op until wired into external metrics backend.
+    """
+    pass
+
+
+def inc_converter_support_preamble_scrubbed(count: int = 1) -> None:
+    """Increment counter for support assistant preamble scrubbed from response text.
+
+    Tracks suppression bypass effectiveness — high values indicate the upstream
+    model is frequently activating its Support Assistant persona.
+    No-op until wired into external metrics backend.
+    """
+    pass
+
+
+def inc_converter_litellm_fallback(count: int = 1) -> None:
+    """Increment counter for litellm Anthropic tool converter fallback to manual path.
+
+    Tracks litellm API instability — persistent high values may indicate a
+    litellm version incompatibility.
+    No-op until wired into external metrics backend.
+    """
+    pass
