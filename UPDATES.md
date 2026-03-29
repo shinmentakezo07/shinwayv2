@@ -5611,3 +5611,51 @@ Comprehensive wiring and dead-code audit of all 6 new pipeline modules added acr
 | SHA | Description |
 |---|
 | 88dc264a | feat(logs): persistent prompt/response SQLite store — PromptLogStore, /v1/internal/prompt-logs CRUD, Next.js proxy route, usePromptLogs hook |
+
+## Session 167 — Converters Layer Improvements (2026-03-29)
+
+### What changed
+
+Six targeted improvements to the `converters/` layer: semantic validation, multi-modal content handling, adjacent same-role message collapsing, converter observability, tool call converter regression tests, and new public API exports.
+
+### Files modified
+
+| File | Action | What changed |
+|---|---|---|
+| `converters/validator.py` | Created | Pre-conversion semantic validator: `validate_tool_calls`, `validate_openai_messages`, `validate_anthropic_messages`, `ConversionValidationError` |
+| `converters/content_types.py` | Created | Multi-modal content block routing: `extract_text_with_placeholders` replaces silent data-loss in `_extract_text` with explicit placeholder insertion |
+| `converters/message_normalizer.py` | Modified | Added `collapse_adjacent_same_role`, `collapse_openai_messages`, `collapse_anthropic_messages` + `_NO_COLLAPSE_ROLES` constant |
+| `converters/from_cursor_anthropic.py` | Modified | Regression test guards both `convert_tool_calls_to_anthropic` copies produce identical output (full deduplication deferred — circular import constraint) |
+| `converters/cursor_helpers.py` | Modified | Wired `inc_converter_non_text_block_dropped` metric into `_extract_text` non-text drop path |
+| `converters/from_cursor.py` | Modified | Wired `inc_converter_support_preamble_scrubbed` into `scrub_support_preamble`; `inc_converter_litellm_fallback` into litellm except block |
+| `tools/metrics.py` | Modified | Added `inc_converter_non_text_block_dropped`, `inc_converter_tool_id_synthesized`, `inc_converter_support_preamble_scrubbed`, `inc_converter_litellm_fallback` |
+| `converters/__init__.py` | Modified | Exported all new public symbols: collapsing functions, validator functions, content_types |
+| `tests/test_converters_validator.py` | Created | 14 tests for pre-conversion semantic validator |
+| `tests/test_converters_content_types.py` | Created | 14 tests for content_types multi-modal routing |
+| `tests/test_message_normalizer.py` | Modified | 10 new tests for collapse functions (27 total, all passing) |
+| `tests/test_from_cursor_anthropic.py` | Modified | Regression test: both `convert_tool_calls_to_anthropic` copies produce identical output |
+| `tests/test_metrics.py` | Modified | 4 new tests for converter metric functions |
+
+### Key functions
+
+- `converters/validator.py:validate_tool_calls` — validates tool call id, name, arguments
+- `converters/validator.py:validate_openai_messages` — validates tool_call_id→id matching
+- `converters/validator.py:validate_anthropic_messages` — validates tool_use id and tool_result→use_id matching
+- `converters/content_types.py:extract_text_with_placeholders` — replaces non-text blocks with `[content omitted: unsupported block type]`
+- `converters/message_normalizer.py:collapse_adjacent_same_role` — collapses same-role adjacent messages, never collapses tool/system/tool_calls
+- `tools/metrics.py:inc_converter_*` — 4 new no-op counter stubs ready to wire into backend
+
+### Why
+
+Converters layer had: silent data loss on non-text content blocks, no semantic validation before conversion (only structural normalization), duplicated tool converter logic across two files (circular import prevents full deduplication — regression test guards divergence), no observability on conversion hot paths, and adjacent same-role message collapsing deferred but never implemented.
+
+### Commit SHAs
+
+| SHA | Description |
+|---|---|
+| 6add9b81 | feat(converters): add pre-conversion semantic validator |
+| e86ff496 | feat(converters): add adjacent same-role message collapsing |
+| b83efb2d | feat(converters): add content_types module — multi-modal placeholder routing |
+| 209a2365 | feat(converters): add converter-specific metrics counters and wire into hot paths |
+| 238a34a3 | refactor(converters): regression test pinning both convert_tool_calls_to_anthropic copies agree |
+| 824de350 | feat(converters): export new validator, content_types, and collapse symbols |
