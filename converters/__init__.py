@@ -36,4 +36,17 @@ from converters.shared import _safe_pct  # noqa: F401
 from converters.message_normalizer import (  # noqa: F401
     normalize_openai_messages,
     normalize_anthropic_messages,
+    collapse_adjacent_same_role,
+    collapse_openai_messages,
+    collapse_anthropic_messages,
+)
+from converters.validator import (  # noqa: F401
+    validate_openai_messages,
+    validate_anthropic_messages,
+    validate_tool_calls,
+    ConversionValidationError,
+)
+from converters.content_types import (  # noqa: F401
+    extract_text_with_placeholders,
+    UNSUPPORTED_BLOCK_PLACEHOLDER,
 )
