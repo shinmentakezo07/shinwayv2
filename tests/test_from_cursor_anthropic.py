@@ -59,3 +59,18 @@ def test_convert_tool_calls_synthesises_missing_id():
     }]
     result = convert_tool_calls_to_anthropic(tool_calls)
     assert result[0]["id"].startswith("call_")
+
+
+def test_convert_tool_calls_to_anthropic_both_copies_agree() -> None:
+    """Both from_cursor_anthropic and from_cursor must produce identical output.
+
+    Deduplication is intentionally deferred: from_cursor.py owns the canonical
+    copy for test-patching (litellm mock), from_cursor_anthropic.py retains its
+    own copy to avoid a circular import (from_cursor.py imports from
+    from_cursor_anthropic.py for the SSE formatters). This test guards against
+    the two copies diverging.
+    """
+    from converters.from_cursor_anthropic import convert_tool_calls_to_anthropic as fn_a
+    from converters.from_cursor import convert_tool_calls_to_anthropic as fn_b
+    tc = [{"id": "c1", "function": {"name": "foo", "arguments": '{"x": 1}'}}]
+    assert fn_a(tc) == fn_b(tc)
